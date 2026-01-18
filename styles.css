@@ -1,0 +1,276 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #0f1218;
+  color: #e6e9ef;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: #0f1218;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.preview-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.preview-frame {
+  width: min(70vw, 620px);
+  aspect-ratio: 1;
+  background: #161a22;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  border: 1px solid #262d3a;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+  outline: none;
+}
+
+.preview-frame.dragover {
+  border-color: #79b8ff;
+  box-shadow: 0 0 0 2px rgba(121, 184, 255, 0.4);
+}
+
+#preview-canvas {
+  width: 100%;
+  height: 100%;
+  border-radius: 18px;
+  display: block;
+}
+
+.drop-hint {
+  position: absolute;
+  inset: auto 12px 12px auto;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(15, 18, 24, 0.75);
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0.7;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.sidebar {
+  background: #141923;
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border: 1px solid #1f2632;
+}
+
+.sidebar header h1 {
+  font-size: 20px;
+  margin: 0 0 4px;
+}
+
+.sidebar header p {
+  margin: 0;
+  color: #a8b0bf;
+  font-size: 14px;
+}
+
+.panel {
+  background: #11151d;
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #1e2531;
+}
+
+.panel h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.tab-group {
+  display: inline-flex;
+  background: #0c1118;
+  border-radius: 999px;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid #1f2734;
+}
+
+.tab {
+  border: none;
+  background: transparent;
+  color: #aeb6c5;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.tab.active {
+  background: #2a3446;
+  color: #ffffff;
+}
+
+.tab-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.tab-panel[hidden] {
+  display: none;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.field.inline {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.field input[type="text"],
+.field select,
+.field input[type="file"] {
+  background: #0f131b;
+  color: inherit;
+  border: 1px solid #243041;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.field input[type="range"] {
+  width: 100%;
+}
+
+.value {
+  font-size: 12px;
+  color: #a4adbe;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.symbol-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #a4adbe;
+}
+
+.symbol-meta button,
+.preview-actions button,
+.panel.actions button,
+#clear-symbol,
+#reset-btn {
+  background: #1c2432;
+  color: inherit;
+  border: 1px solid #2d3646;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.panel.actions {
+  align-items: stretch;
+}
+
+.panel.actions button {
+  width: 100%;
+}
+
+.panel.actions .primary {
+  background: #4c6fff;
+  border-color: #4c6fff;
+  color: white;
+}
+
+.status {
+  font-size: 12px;
+  color: #93d1a7;
+  min-height: 18px;
+}
+
+.thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  background: #0c1017;
+  border: 1px solid #1f2632;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.icon-button {
+  border: 1px solid #1e2531;
+  background: #0c1118;
+  border-radius: 10px;
+  padding: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  min-height: 36px;
+}
+
+.icon-button img {
+  width: 20px;
+  height: 20px;
+  filter: grayscale(1) brightness(1.2);
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  .preview-frame {
+    width: min(90vw, 520px);
+  }
+}

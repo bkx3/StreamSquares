@@ -17,6 +17,10 @@ const state = {
     y: 0,
     rotation: 0,
     opacity: 100,
+    scaleX: 100,
+    scaleY: 100,
+    shearX: 0,
+    shearY: 0,
     tintEnabled: false,
     tintColor: "#ffffff",
     name: "",
@@ -62,6 +66,11 @@ let gradientDragMoved = false;
 let activeGradientColorHandle = null;
 let activeRadialHandle = null;
 let radialDragMoved = false;
+let activeSymbolHandle = null;
+let symbolDragMoved = false;
+let activeTabId = "tab-symbol";
+let symbolDragMode = null;
+let symbolDragStart = null;
 
 const gradientColorPicker = document.createElement("input");
 gradientColorPicker.type = "color";
@@ -79,6 +88,8 @@ const controlEls = {
   symbolLibraryPanel: document.getElementById("symbol-library-panel"),
   iconSearch: document.getElementById("icon-search"),
   iconGrid: document.getElementById("icon-grid"),
+  iconBrowseToggle: document.getElementById("icon-browse-toggle"),
+  iconBrowser: document.getElementById("icon-browser"),
   symbolPanel: document.getElementById("symbol-panel-content"),
   symbolToggle: document.getElementById("symbol-toggle"),
   backgroundPanel: document.getElementById("background-panel-content"),
@@ -90,8 +101,16 @@ const controlEls = {
   symbolConstrain: document.getElementById("symbol-constrain"),
   symbolX: document.getElementById("symbol-x"),
   symbolY: document.getElementById("symbol-y"),
+  symbolPosX: document.getElementById("symbol-pos-x"),
+  symbolPosY: document.getElementById("symbol-pos-y"),
   symbolRotation: document.getElementById("symbol-rotation"),
+  symbolRotationDial: document.getElementById("symbol-rotation-dial"),
+  symbolRotationIndicator: document.querySelector(".rotation-dial-indicator"),
   symbolOpacity: document.getElementById("symbol-opacity"),
+  symbolScaleRange: document.getElementById("symbol-scale-range"),
+  symbolScale: document.getElementById("symbol-scale"),
+  symbolShearX: document.getElementById("symbol-shear-x"),
+  symbolShearY: document.getElementById("symbol-shear-y"),
   symbolTint: document.getElementById("symbol-tint"),
   symbolTintColor: document.getElementById("symbol-tint-color"),
   backgroundMode: document.getElementById("background-mode"),
@@ -102,6 +121,12 @@ const controlEls = {
   backgroundGradientAngleValue: document.getElementById("background-gradient-angle-value"),
   backgroundGradientAngleRow: document.getElementById("background-gradient-angle-row"),
   backgroundGradientToggle: document.getElementById("background-gradient-toggle"),
+  tabSymbol: document.getElementById("tab-symbol"),
+  tabBackground: document.getElementById("tab-background"),
+  tabText: document.getElementById("tab-text"),
+  tabPanelSymbol: document.getElementById("tab-panel-symbol"),
+  tabPanelBackground: document.getElementById("tab-panel-background"),
+  tabPanelText: document.getElementById("tab-panel-text"),
   textValue: document.getElementById("text-value"),
   textFont: document.getElementById("text-font"),
   textSize: document.getElementById("text-size"),
@@ -119,6 +144,7 @@ const controlEls = {
   copyBtn: document.getElementById("copy-btn"),
   toggleGuides: document.getElementById("toggle-guides"),
   resetBtn: document.getElementById("reset-btn"),
+  resetTransform: document.getElementById("reset-transform"),
 };
 
 const STORAGE_KEY = "streamdeck-icon-maker-state";
@@ -145,6 +171,14 @@ function loadState() {
     if (data.symbol) Object.assign(state.symbol, data.symbol);
     if (data.text) Object.assign(state.text, data.text);
     if (typeof data.guides === "boolean") state.guides = data.guides;
+    if ("scale" in state.symbol) {
+      const legacyScale = Number(state.symbol.scale);
+      if (!Number.isNaN(legacyScale)) {
+        if (state.symbol.scaleX == null) state.symbol.scaleX = legacyScale;
+        if (state.symbol.scaleY == null) state.symbol.scaleY = legacyScale;
+      }
+      delete state.symbol.scale;
+    }
     if (state.symbol.source === "upload") {
       state.symbol.source = "none";
       state.symbol.name = "";
@@ -165,13 +199,25 @@ function syncControls() {
   syncBackgroundPickerVisibility();
 
   const sizePts = Math.round((state.symbol.size / 100) * 512);
-  controlEls.symbolWidth.value = sizePts;
-  controlEls.symbolHeight.value = sizePts;
+  if (controlEls.symbolWidth) controlEls.symbolWidth.value = sizePts;
+  if (controlEls.symbolHeight) controlEls.symbolHeight.value = sizePts;
   const pos = getSymbolTopLeft();
-  controlEls.symbolX.value = Math.round(pos.x);
-  controlEls.symbolY.value = Math.round(pos.y);
-  controlEls.symbolRotation.value = state.symbol.rotation;
-  controlEls.symbolOpacity.value = state.symbol.opacity;
+  if (controlEls.symbolX) controlEls.symbolX.value = Math.round(pos.x);
+  if (controlEls.symbolY) controlEls.symbolY.value = Math.round(pos.y);
+  if (controlEls.symbolPosX) controlEls.symbolPosX.value = Math.round(pos.x);
+  if (controlEls.symbolPosY) controlEls.symbolPosY.value = Math.round(pos.y);
+  if (controlEls.symbolRotation) controlEls.symbolRotation.value = state.symbol.rotation;
+  if (controlEls.symbolRotationDial) {
+    controlEls.symbolRotationDial.setAttribute("aria-valuenow", String(state.symbol.rotation));
+  }
+  if (controlEls.symbolRotationIndicator) {
+    controlEls.symbolRotationIndicator.style.transform = `rotate(${state.symbol.rotation}deg)`;
+  }
+  if (controlEls.symbolOpacity) controlEls.symbolOpacity.value = state.symbol.opacity;
+  if (controlEls.symbolScaleRange) controlEls.symbolScaleRange.value = state.symbol.scaleX;
+  if (controlEls.symbolScale) controlEls.symbolScale.value = state.symbol.scaleX;
+  if (controlEls.symbolShearX) controlEls.symbolShearX.value = state.symbol.shearX;
+  if (controlEls.symbolShearY) controlEls.symbolShearY.value = state.symbol.shearY;
   controlEls.symbolTint.checked = state.symbol.tintEnabled;
   controlEls.symbolTintColor.value = state.symbol.tintColor;
 
@@ -255,6 +301,25 @@ function bindPanelToggle(panelEl, toggleEl) {
   });
 }
 
+function setActiveTab(activeId) {
+  const tabs = [controlEls.tabSymbol, controlEls.tabBackground, controlEls.tabText];
+  const panels = [controlEls.tabPanelSymbol, controlEls.tabPanelBackground, controlEls.tabPanelText];
+  activeTabId = activeId;
+  tabs.forEach((tab) => {
+    const isActive = tab.id === activeId;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
+  });
+  panels.forEach((panel) => {
+    panel.hidden = panel.id !== `tab-panel-${activeId.replace("tab-", "")}`;
+  });
+  if (activeId !== "tab-symbol") {
+    state.symbol.editing = false;
+    activeSymbolHandle = null;
+  }
+}
+
 function setSymbolMode(mode) {
   const isUpload = mode === "upload";
   controlEls.symbolTabUpload.classList.toggle("is-active", isUpload);
@@ -265,6 +330,10 @@ function setSymbolMode(mode) {
   controlEls.symbolTabLibrary.tabIndex = isUpload ? -1 : 0;
   controlEls.symbolUploadPanel.hidden = !isUpload;
   controlEls.symbolLibraryPanel.hidden = isUpload;
+  if (isUpload) {
+    controlEls.iconBrowser.hidden = true;
+    controlEls.iconBrowseToggle.setAttribute("aria-expanded", "false");
+  }
 }
 
 function setStatus(message, isError = false) {
@@ -439,6 +508,10 @@ function selectLibraryIcon(name) {
   state.symbol.y = 0;
   state.symbol.rotation = 0;
   state.symbol.opacity = 100;
+  state.symbol.scaleX = 100;
+  state.symbol.scaleY = 100;
+  state.symbol.shearX = 0;
+  state.symbol.shearY = 0;
   state.symbol.tintEnabled = true;
   syncControls();
   setSelectedIconButton(name);
@@ -452,6 +525,10 @@ function filterIconButtons(query) {
     const name = btn.dataset.name || "";
     btn.hidden = normalized ? !name.includes(normalized) : false;
   });
+  if (normalized) {
+    controlEls.iconBrowser.hidden = false;
+    controlEls.iconBrowseToggle.setAttribute("aria-expanded", "true");
+  }
 }
 
 async function loadIconIndex() {
@@ -531,38 +608,204 @@ function drawSymbol(ctx) {
   if (!symbolImage) return;
 
   const size = (state.symbol.size / 100) * 512;
+  const scaleX = state.symbol.scaleX / 100;
+  const scaleY = state.symbol.scaleY / 100;
+  const scaledSizeX = size * scaleX;
+  const scaledSizeY = size * scaleY;
   const centerX = 256 + (state.symbol.x / 100) * 256;
   const centerY = 256 + (state.symbol.y / 100) * 256;
   const rotation = (state.symbol.rotation * Math.PI) / 180;
   const opacity = state.symbol.opacity / 100;
+  const shearX = Math.tan((state.symbol.shearX * Math.PI) / 180);
+  const shearY = Math.tan((state.symbol.shearY * Math.PI) / 180);
 
   ctx.save();
   ctx.translate(centerX, centerY);
   ctx.rotate(rotation);
+  ctx.transform(1, shearY, shearX, 1, 0, 0);
+  ctx.scale(scaleX, scaleY);
   ctx.globalAlpha = opacity;
 
-  const drawX = -size / 2;
-  const drawY = -size / 2;
+  const drawX = -scaledSizeX / 2;
+  const drawY = -scaledSizeY / 2;
 
   if (state.symbol.tintEnabled) {
     const tintCanvas = document.createElement("canvas");
-    tintCanvas.width = size;
-    tintCanvas.height = size;
+    tintCanvas.width = scaledSizeX;
+    tintCanvas.height = scaledSizeY;
     const tintCtx = tintCanvas.getContext("2d");
-    tintCtx.drawImage(symbolImage, 0, 0, size, size);
+    tintCtx.drawImage(symbolImage, 0, 0, scaledSizeX, scaledSizeY);
     tintCtx.globalCompositeOperation = "source-in";
     tintCtx.fillStyle = state.symbol.tintColor;
-    tintCtx.fillRect(0, 0, size, size);
-    ctx.drawImage(tintCanvas, drawX, drawY, size, size);
+    tintCtx.fillRect(0, 0, scaledSizeX, scaledSizeY);
+    ctx.drawImage(tintCanvas, drawX, drawY, scaledSizeX, scaledSizeY);
   } else {
-    ctx.drawImage(symbolImage, drawX, drawY, size, size);
+    ctx.drawImage(symbolImage, drawX, drawY, scaledSizeX, scaledSizeY);
   }
 
   ctx.restore();
 }
 
-function getSymbolTopLeft() {
+function getSymbolMetrics() {
   const size = (state.symbol.size / 100) * 512;
+  const scaleX = state.symbol.scaleX / 100;
+  const scaleY = state.symbol.scaleY / 100;
+  const scaledSizeX = size * scaleX;
+  const scaledSizeY = size * scaleY;
+  const scaledSize = Math.max(scaledSizeX, scaledSizeY);
+  const centerX = 256 + (state.symbol.x / 100) * 256;
+  const centerY = 256 + (state.symbol.y / 100) * 256;
+  const rotation = (state.symbol.rotation * Math.PI) / 180;
+  const shearX = Math.tan((state.symbol.shearX * Math.PI) / 180);
+  const shearY = Math.tan((state.symbol.shearY * Math.PI) / 180);
+  return {
+    size: scaledSize,
+    centerX,
+    centerY,
+    rotation,
+    shearX,
+    shearY,
+    scaleX,
+    scaleY,
+  };
+}
+
+function getSymbolLocalPoint(point) {
+  const { centerX, centerY, rotation, shearX, shearY, scaleX, scaleY } = getSymbolMetrics();
+  const dx = point.x - centerX;
+  const dy = point.y - centerY;
+  const cos = Math.cos(-rotation);
+  const sin = Math.sin(-rotation);
+  const rx = dx * cos - dy * sin;
+  const ry = dx * sin + dy * cos;
+  const det = 1 - shearX * shearY;
+  const invX = (rx - shearX * ry) / det;
+  const invY = (ry - shearY * rx) / det;
+  return { x: invX / scaleX, y: invY / scaleY };
+}
+
+function getSymbolCorners() {
+  const { size, centerX, centerY, rotation, shearX, shearY } = getSymbolMetrics();
+  const half = size / 2;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  const corners = [
+    { name: "nw", x: -half, y: -half },
+    { name: "ne", x: half, y: -half },
+    { name: "se", x: half, y: half },
+    { name: "sw", x: -half, y: half },
+  ];
+  return corners.map((corner) => {
+    const sx = corner.x + shearX * corner.y;
+    const sy = shearY * corner.x + corner.y;
+    return {
+    name: corner.name,
+    x: centerX + sx * cos - sy * sin,
+    y: centerY + sx * sin + sy * cos,
+  };
+  });
+}
+
+function isPointInSymbol(point) {
+  if (!symbolImage) return false;
+  const { size } = getSymbolMetrics();
+  const local = getSymbolLocalPoint(point);
+  return Math.abs(local.x) <= size / 2 && Math.abs(local.y) <= size / 2;
+}
+
+function getSymbolHandleAtPoint(point) {
+  if (!symbolImage) return null;
+  const corners = getSymbolCorners();
+  for (const corner of corners) {
+    const dx = point.x - corner.x;
+    const dy = point.y - corner.y;
+    if (Math.hypot(dx, dy) <= 12) {
+      return corner.name;
+    }
+  }
+  return null;
+}
+
+function drawSymbolHandles(ctx) {
+  if (!symbolImage || !state.symbol.editing) return;
+  const scale = previewCanvas.clientWidth / 512;
+  const corners = getSymbolCorners();
+
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
+  ctx.beginPath();
+  corners.forEach((corner, index) => {
+    const x = corner.x * scale;
+    const y = corner.y * scale;
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.closePath();
+  ctx.stroke();
+
+  corners.forEach((corner) => {
+    const x = corner.x * scale;
+    const y = corner.y * scale;
+    ctx.beginPath();
+    ctx.fillStyle = "#ffffff";
+    ctx.strokeStyle = "rgba(16, 20, 28, 0.9)";
+    ctx.lineWidth = 2;
+    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function getSymbolRotateHandleAtPoint(point) {
+  if (!symbolImage) return null;
+  const corners = getSymbolCorners();
+  for (const corner of corners) {
+    const dx = point.x - corner.x;
+    const dy = point.y - corner.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance <= 22 && distance > 12) {
+      return corner.name;
+    }
+  }
+  return null;
+}
+
+function normalizeRotation(degrees) {
+  let value = ((degrees + 180) % 360 + 360) % 360 - 180;
+  if (value === -180) value = 180;
+  return value;
+}
+
+function updateSymbolCursor(point) {
+  if (activeTabId !== "tab-symbol" || !symbolImage) {
+    previewCanvas.style.cursor = "default";
+    return;
+  }
+  const handle = getSymbolHandleAtPoint(point);
+  if (handle) {
+    previewCanvas.style.cursor = "nwse-resize";
+    return;
+  }
+  const rotateHandle = getSymbolRotateHandleAtPoint(point);
+  if (rotateHandle) {
+    previewCanvas.style.cursor = "crosshair";
+    return;
+  }
+  if (isPointInSymbol(point)) {
+    previewCanvas.style.cursor = "move";
+    return;
+  }
+  previewCanvas.style.cursor = "default";
+}
+
+function getSymbolTopLeft() {
+  const size =
+    (state.symbol.size / 100) * 512 * (Math.max(state.symbol.scaleX, state.symbol.scaleY) / 100);
   const centerX = 256 + (state.symbol.x / 100) * 256;
   const centerY = 256 + (state.symbol.y / 100) * 256;
   return {
@@ -572,7 +815,8 @@ function getSymbolTopLeft() {
 }
 
 function updateSymbolFromTopLeft(topLeftX, topLeftY) {
-  const size = (state.symbol.size / 100) * 512;
+  const size =
+    (state.symbol.size / 100) * 512 * (Math.max(state.symbol.scaleX, state.symbol.scaleY) / 100);
   const clampedX = Math.min(512 - size, Math.max(0, topLeftX));
   const clampedY = Math.min(512 - size, Math.max(0, topLeftY));
   const centerX = clampedX + size / 2;
@@ -636,12 +880,13 @@ function render() {
 
   previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
   previewCtx.drawImage(renderCanvas, 0, 0, previewCanvas.clientWidth, previewCanvas.clientHeight);
-  if (state.background.mode === "gradient" && state.background.editing) {
+  if (activeTabId === "tab-background" && state.background.mode === "gradient" && state.background.editing) {
     drawGradientHandles(previewCtx);
   }
-  if (state.background.mode === "radial" && state.background.editing) {
+  if (activeTabId === "tab-background" && state.background.mode === "radial" && state.background.editing) {
     drawRadialHandles(previewCtx);
   }
+  drawSymbolHandles(previewCtx);
 
   if (actualSizeToggle?.checked) {
     renderActualSizePreview();
@@ -731,6 +976,18 @@ function getPointerPosition(event) {
   return { x: x * scale, y: y * scale };
 }
 
+function resizeSymbolFromPointer(point) {
+  const { centerX, centerY, scaleX, scaleY } = getSymbolMetrics();
+  const local = getSymbolLocalPoint(point);
+  const nextSize = Math.min(512, Math.max(8, 2 * Math.max(Math.abs(local.x), Math.abs(local.y))));
+  const baseSize = Math.min(512, Math.max(8, nextSize / Math.max(scaleX, scaleY)));
+  state.symbol.size = (baseSize / 512) * 100;
+  const topLeftX = centerX - nextSize / 2;
+  const topLeftY = centerY - nextSize / 2;
+  updateSymbolFromTopLeft(topLeftX, topLeftY);
+  syncControls();
+}
+
 function hitTestHandle(point, handle) {
   const dx = point.x - handle.x;
   const dy = point.y - handle.y;
@@ -776,6 +1033,17 @@ function exportPng() {
 
 async function copyToClipboard() {
   render();
+  try {
+    if (navigator.permissions?.query) {
+      const permission = await navigator.permissions.query({ name: "clipboard-write" });
+      if (permission.state === "denied") {
+        setStatus("Clipboard permission denied.", true);
+        return false;
+      }
+    }
+  } catch (error) {
+    console.warn("Clipboard permission check failed", error);
+  }
   if (navigator.clipboard && window.ClipboardItem) {
     return new Promise((resolve) => {
       renderCanvas.toBlob(async (blob) => {
@@ -810,6 +1078,7 @@ async function copyToClipboard() {
 }
 
 function bindControl(input, handler) {
+  if (!input) return;
   input.addEventListener("input", () => {
     handler();
     saveState();
@@ -834,6 +1103,10 @@ function resetState() {
     y: 0,
     rotation: 0,
     opacity: 100,
+    scaleX: 100,
+    scaleY: 100,
+    shearX: 0,
+    shearY: 0,
     tintEnabled: false,
     tintColor: "#ffffff",
     name: "",
@@ -869,42 +1142,26 @@ controlEls.iconSearch.addEventListener("input", () => {
   filterIconButtons(controlEls.iconSearch.value);
 });
 
+controlEls.iconBrowseToggle.addEventListener("click", () => {
+  const willOpen = controlEls.iconBrowser.hidden;
+  controlEls.iconBrowser.hidden = !willOpen;
+  controlEls.iconBrowseToggle.setAttribute("aria-expanded", String(willOpen));
+});
+
 controlEls.clearSymbol.addEventListener("click", () => {
   clearSymbol();
 });
 
-bindControl(controlEls.symbolWidth, () => {
-  const nextPts = Number(controlEls.symbolWidth.value);
-  const clamped = Math.min(512, Math.max(0, nextPts));
-  if (controlEls.symbolConstrain.checked) {
-    controlEls.symbolHeight.value = String(clamped);
-  }
-  state.symbol.size = (clamped / 512) * 100;
-  updateSymbolFromTopLeft(controlEls.symbolX.valueAsNumber || 0, controlEls.symbolY.valueAsNumber || 0);
-  syncControls();
-});
-
-bindControl(controlEls.symbolHeight, () => {
-  const nextPts = Number(controlEls.symbolHeight.value);
-  const clamped = Math.min(512, Math.max(0, nextPts));
-  if (controlEls.symbolConstrain.checked) {
-    controlEls.symbolWidth.value = String(clamped);
-  }
-  state.symbol.size = (clamped / 512) * 100;
-  updateSymbolFromTopLeft(controlEls.symbolX.valueAsNumber || 0, controlEls.symbolY.valueAsNumber || 0);
-  syncControls();
-});
-
-bindControl(controlEls.symbolX, () => {
-  const next = Number(controlEls.symbolX.value);
+bindControl(controlEls.symbolPosX, () => {
+  const next = Number(controlEls.symbolPosX.value);
   const clamped = Math.min(512, Math.max(0, next));
   const current = getSymbolTopLeft();
   updateSymbolFromTopLeft(clamped, current.y);
   syncControls();
 });
 
-bindControl(controlEls.symbolY, () => {
-  const next = Number(controlEls.symbolY.value);
+bindControl(controlEls.symbolPosY, () => {
+  const next = Number(controlEls.symbolPosY.value);
   const clamped = Math.min(512, Math.max(0, next));
   const current = getSymbolTopLeft();
   updateSymbolFromTopLeft(current.x, clamped);
@@ -913,10 +1170,42 @@ bindControl(controlEls.symbolY, () => {
 
 bindControl(controlEls.symbolRotation, () => {
   state.symbol.rotation = Number(controlEls.symbolRotation.value);
+  syncControls();
 });
 
 bindControl(controlEls.symbolOpacity, () => {
   state.symbol.opacity = Number(controlEls.symbolOpacity.value);
+});
+
+bindControl(controlEls.symbolScaleRange, () => {
+  const next = Number(controlEls.symbolScaleRange.value);
+  state.symbol.scaleX = next;
+  state.symbol.scaleY = next;
+  if (controlEls.symbolScale) {
+    controlEls.symbolScale.value = String(next);
+  }
+  syncControls();
+});
+
+bindControl(controlEls.symbolScale, () => {
+  const next = Number(controlEls.symbolScale.value);
+  const clamped = Math.min(200, Math.max(10, next));
+  state.symbol.scaleX = clamped;
+  state.symbol.scaleY = clamped;
+  if (controlEls.symbolScaleRange) {
+    controlEls.symbolScaleRange.value = String(clamped);
+  }
+  syncControls();
+});
+
+bindControl(controlEls.symbolShearX, () => {
+  state.symbol.shearX = Number(controlEls.symbolShearX.value);
+  syncControls();
+});
+
+bindControl(controlEls.symbolShearY, () => {
+  state.symbol.shearY = Number(controlEls.symbolShearY.value);
+  syncControls();
 });
 
 controlEls.symbolTint.addEventListener("change", () => {
@@ -1027,6 +1316,12 @@ controlEls.resetBtn.addEventListener("click", () => {
   resetState();
 });
 
+if (controlEls.resetTransform) {
+  controlEls.resetTransform.addEventListener("click", () => {
+    resetSymbolTransform();
+  });
+}
+
 controlEls.backgroundGradientToggle.addEventListener("click", () => {
   if (state.background.mode === "solid") {
     return;
@@ -1041,6 +1336,10 @@ controlEls.backgroundGradientToggle.addEventListener("click", () => {
   saveState();
   render();
 });
+
+controlEls.tabSymbol.addEventListener("click", () => setActiveTab("tab-symbol"));
+controlEls.tabBackground.addEventListener("click", () => setActiveTab("tab-background"));
+controlEls.tabText.addEventListener("click", () => setActiveTab("tab-text"));
 
 document.querySelectorAll(".stepper-arrow").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -1057,9 +1356,130 @@ document.querySelectorAll(".stepper-arrow").forEach((btn) => {
   });
 });
 
+document.querySelectorAll(".drag-label").forEach((label) => {
+  let startX = 0;
+  let startValue = 0;
+  let activeInput = null;
+
+  const onPointerMove = (event) => {
+    if (!activeInput) return;
+    const step = Number(label.dataset.step || "1");
+    const delta = Math.round((event.clientX - startX) / 4) * step;
+    const min = Number(activeInput.min ?? "-Infinity");
+    const max = Number(activeInput.max ?? "Infinity");
+    const next = Math.min(max, Math.max(min, startValue + delta));
+    activeInput.value = String(next);
+    activeInput.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+
+  const onPointerUp = () => {
+    activeInput = null;
+    label.classList.remove("is-dragging");
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+  };
+
+  label.addEventListener("pointerdown", (event) => {
+    const targetId = label.dataset.target;
+    const input = document.getElementById(targetId);
+    if (!input) return;
+    event.preventDefault();
+    activeInput = input;
+    startX = event.clientX;
+    startValue = Number(input.value || "0");
+    label.classList.add("is-dragging");
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+  });
+});
+
+if (controlEls.symbolRotationDial) {
+  const updateRotationFromDial = (event) => {
+    const rect = controlEls.symbolRotationDial.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = event.clientX - cx;
+    const dy = event.clientY - cy;
+    const angle = Math.atan2(dy, dx);
+    let degrees = Math.round((angle * 180) / Math.PI + 90);
+    if (degrees > 180) degrees -= 360;
+    if (degrees < -180) degrees += 360;
+    state.symbol.rotation = normalizeRotation(degrees);
+    syncControls();
+    saveState();
+    render();
+  };
+
+  controlEls.symbolRotationDial.addEventListener("pointerdown", (event) => {
+    controlEls.symbolRotationDial.setPointerCapture(event.pointerId);
+    updateRotationFromDial(event);
+  });
+
+  controlEls.symbolRotationDial.addEventListener("pointermove", (event) => {
+    if (controlEls.symbolRotationDial.hasPointerCapture(event.pointerId)) {
+      updateRotationFromDial(event);
+    }
+  });
+
+  controlEls.symbolRotationDial.addEventListener("pointerup", (event) => {
+    if (controlEls.symbolRotationDial.hasPointerCapture(event.pointerId)) {
+      controlEls.symbolRotationDial.releasePointerCapture(event.pointerId);
+    }
+  });
+
+  controlEls.symbolRotationDial.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      state.symbol.rotation = normalizeRotation(state.symbol.rotation + 1);
+      syncControls();
+      saveState();
+      render();
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      state.symbol.rotation = normalizeRotation(state.symbol.rotation - 1);
+      syncControls();
+      saveState();
+      render();
+    }
+  });
+}
+
 previewCanvas.addEventListener("pointerdown", (event) => {
-  if (state.background.mode !== "gradient" && state.background.mode !== "radial") return;
   const point = getPointerPosition(event);
+  const isSymbolTabActive = activeTabId === "tab-symbol";
+  if (isSymbolTabActive && symbolImage) {
+    const handle = getSymbolHandleAtPoint(point);
+    const rotateHandle = handle ? null : getSymbolRotateHandleAtPoint(point);
+    if (handle || rotateHandle || isPointInSymbol(point)) {
+      state.symbol.editing = true;
+      if (handle) {
+        activeSymbolHandle = handle;
+        symbolDragMode = "resize";
+      } else if (rotateHandle) {
+        activeSymbolHandle = rotateHandle;
+        symbolDragMode = "rotate";
+      } else {
+        activeSymbolHandle = null;
+        symbolDragMode = "move";
+      }
+      const { size, centerX, centerY, rotation } = getSymbolMetrics();
+      symbolDragStart = {
+        point,
+        centerX,
+        centerY,
+        size,
+        rotation,
+        offsetX: point.x - centerX,
+        offsetY: point.y - centerY,
+        angle: Math.atan2(point.y - centerY, point.x - centerX),
+      };
+      symbolDragMoved = false;
+      previewCanvas.setPointerCapture(event.pointerId);
+      render();
+      return;
+    }
+  }
+  if (activeTabId !== "tab-background") return;
+  if (state.background.mode !== "gradient" && state.background.mode !== "radial") return;
   state.background.editing = true;
   previewCanvas.setPointerCapture(event.pointerId);
   if (state.background.mode === "gradient") {
@@ -1093,8 +1513,38 @@ previewCanvas.addEventListener("pointerdown", (event) => {
 });
 
 previewCanvas.addEventListener("pointermove", (event) => {
-  if (!activeGradientHandle && !activeRadialHandle) return;
   const point = getPointerPosition(event);
+  if (symbolDragMode) {
+    symbolDragMoved = true;
+    if (symbolDragMode === "resize") {
+      resizeSymbolFromPointer(point);
+    } else if (symbolDragMode === "move") {
+      const { size } = getSymbolMetrics();
+      const offsetX = symbolDragStart?.offsetX ?? 0;
+      const offsetY = symbolDragStart?.offsetY ?? 0;
+      const centerX = point.x - offsetX;
+      const centerY = point.y - offsetY;
+      updateSymbolFromTopLeft(centerX - size / 2, centerY - size / 2);
+      syncControls();
+    } else if (symbolDragMode === "rotate") {
+      const centerX = symbolDragStart?.centerX ?? 256;
+      const centerY = symbolDragStart?.centerY ?? 256;
+      const startRotation = symbolDragStart?.rotation ?? 0;
+      const startAngle = symbolDragStart?.angle ?? 0;
+      const currentAngle = Math.atan2(point.y - centerY, point.x - centerX);
+      const delta = ((currentAngle - startAngle) * 180) / Math.PI;
+      let nextRotation = startRotation + delta;
+      if (event.shiftKey) {
+        nextRotation = Math.round(nextRotation / 45) * 45;
+      }
+      state.symbol.rotation = normalizeRotation(nextRotation);
+      syncControls();
+    }
+    render();
+    return;
+  }
+  updateSymbolCursor(point);
+  if (!activeGradientHandle && !activeRadialHandle) return;
   if (activeGradientHandle) {
     gradientDragMoved = true;
     if (activeGradientHandle === "start") {
@@ -1126,8 +1576,20 @@ previewCanvas.addEventListener("pointermove", (event) => {
 });
 
 previewCanvas.addEventListener("pointerup", (event) => {
+  if (previewCanvas.hasPointerCapture(event.pointerId)) {
+    previewCanvas.releasePointerCapture(event.pointerId);
+  }
+  if (symbolDragMode) {
+    activeSymbolHandle = null;
+    symbolDragMoved = false;
+    symbolDragMode = null;
+    symbolDragStart = null;
+    updateSymbolCursor(getPointerPosition(event));
+    saveState();
+    render();
+    return;
+  }
   if (!state.background.editing) return;
-  previewCanvas.releasePointerCapture(event.pointerId);
   if (activeGradientHandle) {
     if (!gradientDragMoved) {
       const point = getPointerPosition(event);
@@ -1155,8 +1617,9 @@ previewCanvas.addEventListener("dblclick", (event) => {
 });
 
 document.addEventListener("pointerdown", (event) => {
-  if (!state.background.editing) return;
-  if (event.target !== previewCanvas) {
+  if (event.target === previewCanvas) return;
+  let needsRender = false;
+  if (state.background.editing) {
     state.background.editing = false;
     activeGradientHandle = null;
     gradientDragMoved = false;
@@ -1164,6 +1627,17 @@ document.addEventListener("pointerdown", (event) => {
     radialDragMoved = false;
     hideGradientColorPicker();
     controlEls.backgroundGradientToggle.setAttribute("aria-pressed", "false");
+    needsRender = true;
+  }
+  if (state.symbol.editing) {
+    state.symbol.editing = false;
+    activeSymbolHandle = null;
+    symbolDragMoved = false;
+    symbolDragMode = null;
+    symbolDragStart = null;
+    needsRender = true;
+  }
+  if (needsRender) {
     render();
   }
 });
@@ -1224,6 +1698,7 @@ loadState();
 ensureGradientPoints();
 ensureRadialDefaults();
 syncControls();
+setActiveTab("tab-symbol");
 setSymbolMode(state.symbol.source === "library" ? "library" : "upload");
 updatePreviewScale();
 actualSizePreview.hidden = !actualSizeToggle.checked;
@@ -1240,3 +1715,15 @@ loadIconIndex().then(() => {
     loadLibraryIcon(state.symbol.libraryName);
   }
 });
+function resetSymbolTransform() {
+  state.symbol.x = 0;
+  state.symbol.y = 0;
+  state.symbol.rotation = 0;
+  state.symbol.scaleX = 100;
+  state.symbol.scaleY = 100;
+  state.symbol.shearX = 0;
+  state.symbol.shearY = 0;
+  syncControls();
+  saveState();
+  render();
+}

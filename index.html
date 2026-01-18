@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <header class="page-header">
+      <h1>Stream Deck Icon Maker</h1>
+      <p>Create 512×512 icons with layers and export as PNG.</p>
+    </header>
     <main class="app">
       <section class="preview-panel" aria-label="Preview">
         <div class="preview-frame" id="drop-zone" tabindex="0" aria-label="Icon preview. Drag and drop an image to load.">
@@ -17,30 +21,41 @@
           <div class="drop-hint" id="drop-hint" hidden>Drop SVG or PNG</div>
         </div>
         <div class="preview-actions">
-          <label class="toggle">
-            <input type="checkbox" id="actual-size" />
-            <span>Actual size</span>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" id="toggle-guides" />
-            <span>Show guides</span>
-          </label>
-          <button type="button" id="reset-btn">Reset</button>
+          <div class="preview-actions-left">
+            <label class="toggle">
+              <input type="checkbox" id="actual-size" />
+              <span>Actual size</span>
+            </label>
+            <label class="toggle">
+              <input type="checkbox" id="toggle-guides" />
+              <span>Show guides</span>
+            </label>
+            <button type="button" id="reset-btn">Reset</button>
+          </div>
+          <div class="preview-actions-right">
+            <span class="action-separator" aria-hidden="true">|</span>
+            <button type="button" id="export-btn" class="primary">Export PNG</button>
+            <button type="button" id="copy-btn" class="icon-action" aria-label="Copy to Clipboard">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="9" y="9" width="10" height="10" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2" />
+                <path d="M15 9V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+              </svg>
+            </button>
+          </div>
         </div>
       </section>
 
       <aside class="sidebar">
-        <header>
-          <h1>Stream Deck Icon Maker</h1>
-          <p>Create 512×512 icons with layers and export as PNG.</p>
-        </header>
 
-        <section class="panel is-collapsible" aria-labelledby="symbol-heading">
-          <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="symbol-panel-content" id="symbol-toggle">
-            <span class="disclosure" aria-hidden="true"></span>
-            <h2 id="symbol-heading">Symbol</h2>
-          </button>
-          <div class="panel-content" id="symbol-panel-content">
+        <div class="sidebar-tabs" role="tablist" aria-label="Sidebar tabs">
+          <button type="button" class="tab-btn is-active" id="tab-symbol" role="tab" aria-selected="true" aria-controls="tab-panel-symbol">Symbol</button>
+          <button type="button" class="tab-btn" id="tab-background" role="tab" aria-selected="false" aria-controls="tab-panel-background">Background</button>
+          <button type="button" class="tab-btn" id="tab-text" role="tab" aria-selected="false" aria-controls="tab-panel-text">Text</button>
+        </div>
+
+        <div class="tab-panel" id="tab-panel-symbol" role="tabpanel" aria-labelledby="tab-symbol">
+          <section class="panel">
+            <div class="panel-content" id="symbol-panel-content">
           <div class="segmented" role="tablist" aria-label="Symbol source">
             <button type="button" class="segmented-btn is-active" id="symbol-tab-upload" role="tab" aria-selected="true" aria-controls="symbol-upload-panel">Upload</button>
             <button type="button" class="segmented-btn" id="symbol-tab-library" role="tab" aria-selected="false" aria-controls="symbol-library-panel">Library</button>
@@ -54,9 +69,14 @@
           <div class="symbol-panel" id="symbol-library-panel" role="tabpanel" hidden>
             <div class="field">
               <label for="icon-search">Search icons</label>
-              <input type="text" id="icon-search" placeholder="Search icons..." autocomplete="off" />
+              <div class="icon-search-row">
+                <input type="text" id="icon-search" placeholder="Search icons..." autocomplete="off" />
+                <button type="button" class="icon-browse-toggle" id="icon-browse-toggle" aria-expanded="false" aria-controls="icon-browser">Browse</button>
+              </div>
             </div>
-            <div class="icon-grid" id="icon-grid" role="listbox" aria-label="Icon library"></div>
+            <div class="icon-browser" id="icon-browser" hidden>
+              <div class="icon-grid" id="icon-grid" role="listbox" aria-label="Icon library"></div>
+            </div>
           </div>
           <div class="symbol-meta" id="symbol-meta">
             <span id="symbol-name">No symbol loaded</span>
@@ -64,96 +84,109 @@
           </div>
           <div class="thumb" id="symbol-thumb" aria-hidden="true"></div>
 
-          <div class="transform-grid" aria-label="Symbol transform">
-            <div class="transform-row" aria-label="Size">
-              <div class="control-block inline">
-                <label class="control-label" for="symbol-width">W</label>
-                <div class="stepper-vert">
-                  <div class="stepper-value">
-                    <input type="number" id="symbol-width" min="0" max="512" step="1" value="300" />
-                    <span class="unit">pts</span>
-                  </div>
-                  <div class="stepper-arrows">
-                    <button type="button" class="stepper-arrow" data-target="symbol-width" data-step="1" aria-label="Increase width">▲</button>
-                    <button type="button" class="stepper-arrow" data-target="symbol-width" data-step="-1" aria-label="Decrease width">▼</button>
-                  </div>
-                </div>
-              </div>
-              <div class="control-block inline">
-                <label class="control-label" for="symbol-height">H</label>
-                <div class="stepper-vert">
-                  <div class="stepper-value">
-                    <input type="number" id="symbol-height" min="0" max="512" step="1" value="300" />
-                    <span class="unit">pts</span>
-                  </div>
-                  <div class="stepper-arrows">
-                    <button type="button" class="stepper-arrow" data-target="symbol-height" data-step="1" aria-label="Increase height">▲</button>
-                    <button type="button" class="stepper-arrow" data-target="symbol-height" data-step="-1" aria-label="Decrease height">▼</button>
-                  </div>
-                </div>
-              </div>
-              <div class="control-block inline constraint-block">
-                <label class="control-label" for="symbol-constrain">Constrain</label>
-                <input type="checkbox" id="symbol-constrain" checked />
-              </div>
+          <div class="transform-box" aria-label="Transform">
+            <div class="panel-section-header">
+              <h3 class="panel-section-title">Transform</h3>
+              <button type="button" class="icon-action reset-transform" id="reset-transform" aria-label="Reset transform">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M3 4v6h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
             </div>
-            <div class="transform-row" aria-label="Position">
-              <div class="control-block inline">
-                <label class="control-label" for="symbol-x">X</label>
-                <div class="stepper-vert">
-                  <div class="stepper-value">
-                    <input type="number" id="symbol-x" min="0" max="512" step="1" value="106" />
-                    <span class="unit">pts</span>
+            <div class="transform-grid" aria-label="Symbol transform">
+              <div class="transform-group" aria-label="Position">
+                <div class="transform-group-title">Position</div>
+                <div class="transform-row" aria-label="Position">
+                  <div class="control-block inline">
+                    <label class="control-label drag-label" for="symbol-pos-x" data-target="symbol-pos-x" data-step="1">X</label>
+                    <div class="stepper-vert">
+                      <div class="stepper-value">
+                        <input type="number" id="symbol-pos-x" min="0" max="512" step="1" value="106" />
+                        <span class="unit">px</span>
+                      </div>
+                      <div class="stepper-arrows">
+                        <button type="button" class="stepper-arrow" data-target="symbol-pos-x" data-step="1" aria-label="Increase X position">▲</button>
+                        <button type="button" class="stepper-arrow" data-target="symbol-pos-x" data-step="-1" aria-label="Decrease X position">▼</button>
+                      </div>
+                    </div>
                   </div>
-                  <div class="stepper-arrows">
-                    <button type="button" class="stepper-arrow" data-target="symbol-x" data-step="1" aria-label="Increase X position">▲</button>
-                    <button type="button" class="stepper-arrow" data-target="symbol-x" data-step="-1" aria-label="Decrease X position">▼</button>
-                  </div>
-                </div>
-              </div>
-              <div class="control-block inline">
-                <label class="control-label" for="symbol-y">Y</label>
-                <div class="stepper-vert">
-                  <div class="stepper-value">
-                    <input type="number" id="symbol-y" min="0" max="512" step="1" value="106" />
-                    <span class="unit">pts</span>
-                  </div>
-                  <div class="stepper-arrows">
-                    <button type="button" class="stepper-arrow" data-target="symbol-y" data-step="1" aria-label="Increase Y position">▲</button>
-                    <button type="button" class="stepper-arrow" data-target="symbol-y" data-step="-1" aria-label="Decrease Y position">▼</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="transform-row" aria-label="Rotate">
-              <div class="control-block inline">
-                <label class="control-label" for="symbol-rotation">Rot</label>
-                <div class="stepper-vert">
-                  <div class="stepper-value">
-                    <input type="number" id="symbol-rotation" min="-180" max="180" step="1" value="0" />
-                    <span class="unit">°</span>
-                  </div>
-                  <div class="stepper-arrows">
-                    <button type="button" class="stepper-arrow" data-target="symbol-rotation" data-step="1" aria-label="Increase rotation">▲</button>
-                    <button type="button" class="stepper-arrow" data-target="symbol-rotation" data-step="-1" aria-label="Decrease rotation">▼</button>
+                  <div class="control-block inline">
+                    <label class="control-label drag-label" for="symbol-pos-y" data-target="symbol-pos-y" data-step="1">Y</label>
+                    <div class="stepper-vert">
+                      <div class="stepper-value">
+                        <input type="number" id="symbol-pos-y" min="0" max="512" step="1" value="106" />
+                        <span class="unit">px</span>
+                      </div>
+                      <div class="stepper-arrows">
+                        <button type="button" class="stepper-arrow" data-target="symbol-pos-y" data-step="1" aria-label="Increase Y position">▲</button>
+                        <button type="button" class="stepper-arrow" data-target="symbol-pos-y" data-step="-1" aria-label="Decrease Y position">▼</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              <div class="control-block inline">
-                <label class="control-label" for="symbol-opacity">Opacity</label>
-                <div class="stepper-vert">
-                  <div class="stepper-value">
-                    <input type="number" id="symbol-opacity" min="0" max="100" step="1" value="100" />
-                    <span class="unit">%</span>
+              <div class="transform-group" aria-label="Rotation">
+                <div class="transform-group-title">Rotation</div>
+                <div class="rotation-row">
+                  <div class="rotation-dial" id="symbol-rotation-dial" role="slider" aria-valuemin="-180" aria-valuemax="180" aria-valuenow="0" tabindex="0">
+                    <div class="rotation-dial-indicator"></div>
                   </div>
-                  <div class="stepper-arrows">
-                    <button type="button" class="stepper-arrow" data-target="symbol-opacity" data-step="1" aria-label="Increase opacity">▲</button>
-                    <button type="button" class="stepper-arrow" data-target="symbol-opacity" data-step="-1" aria-label="Decrease opacity">▼</button>
+                  <div class="stepper-vert">
+                    <div class="stepper-value">
+                      <input type="number" id="symbol-rotation" min="-180" max="180" step="1" value="0" />
+                      <span class="unit">°</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="transform-group" aria-label="Scale">
+                <div class="transform-group-title">Scale</div>
+                <div class="scale-row">
+                  <label class="control-label drag-label" for="symbol-scale" data-target="symbol-scale" data-step="1">Scale</label>
+                  <input type="range" id="symbol-scale-range" min="10" max="200" step="1" value="100" />
+                  <div class="stepper-vert">
+                    <div class="stepper-value">
+                      <input type="number" id="symbol-scale" min="10" max="200" step="1" value="100" />
+                      <span class="unit">%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="transform-group" aria-label="Shear">
+                <div class="transform-group-title">Shear</div>
+                <div class="transform-row" aria-label="Shear">
+                  <div class="control-block inline">
+                    <label class="control-label drag-label" for="symbol-shear-x" data-target="symbol-shear-x" data-step="1">X</label>
+                    <div class="stepper-vert">
+                      <div class="stepper-value">
+                        <input type="number" id="symbol-shear-x" min="-60" max="60" step="1" value="0" />
+                        <span class="unit">°</span>
+                      </div>
+                      <div class="stepper-arrows">
+                        <button type="button" class="stepper-arrow" data-target="symbol-shear-x" data-step="1" aria-label="Increase X shear">▲</button>
+                        <button type="button" class="stepper-arrow" data-target="symbol-shear-x" data-step="-1" aria-label="Decrease X shear">▼</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="control-block inline">
+                    <label class="control-label drag-label" for="symbol-shear-y" data-target="symbol-shear-y" data-step="1">Y</label>
+                    <div class="stepper-vert">
+                      <div class="stepper-value">
+                        <input type="number" id="symbol-shear-y" min="-60" max="60" step="1" value="0" />
+                        <span class="unit">°</span>
+                      </div>
+                      <div class="stepper-arrows">
+                        <button type="button" class="stepper-arrow" data-target="symbol-shear-y" data-step="1" aria-label="Increase Y shear">▲</button>
+                        <button type="button" class="stepper-arrow" data-target="symbol-shear-y" data-step="-1" aria-label="Decrease Y shear">▼</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+          <h3 class="panel-section-title">Appearance</h3>
           <div class="field inline">
             <label class="toggle" for="symbol-tint">
               <input type="checkbox" id="symbol-tint" />
@@ -161,15 +194,13 @@
             </label>
             <input type="color" id="symbol-tint-color" value="#ffffff" aria-label="Tint color" />
           </div>
-          </div>
-        </section>
+            </div>
+          </section>
+        </div>
 
-        <section class="panel is-collapsible" aria-labelledby="background-heading">
-          <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="background-panel-content" id="background-toggle">
-            <span class="disclosure" aria-hidden="true"></span>
-            <h2 id="background-heading">Background</h2>
-          </button>
-          <div class="panel-content" id="background-panel-content">
+        <div class="tab-panel" id="tab-panel-background" role="tabpanel" aria-labelledby="tab-background" hidden>
+          <section class="panel">
+            <div class="panel-content" id="background-panel-content">
           <div class="field">
             <label for="background-mode">Mode</label>
             <select id="background-mode">
@@ -199,15 +230,13 @@
             <input type="range" id="background-gradient-angle" min="0" max="360" value="45" />
             <span class="value" id="background-gradient-angle-value">45°</span>
           </div>
-          </div>
-        </section>
+            </div>
+          </section>
+        </div>
 
-        <section class="panel is-collapsible" aria-labelledby="text-heading">
-          <button type="button" class="panel-toggle" aria-expanded="true" aria-controls="text-panel-content" id="text-toggle">
-            <span class="disclosure" aria-hidden="true"></span>
-            <h2 id="text-heading">Text</h2>
-          </button>
-          <div class="panel-content" id="text-panel-content">
+        <div class="tab-panel" id="tab-panel-text" role="tabpanel" aria-labelledby="tab-text" hidden>
+          <section class="panel">
+            <div class="panel-content" id="text-panel-content">
           <div class="field">
             <label for="text-value">Label</label>
             <input type="text" id="text-value" placeholder="Optional text" />
@@ -263,12 +292,11 @@
             <input type="range" id="text-stroke-width" min="0" max="8" value="2" />
             <span class="value" id="text-stroke-width-value">2</span>
           </div>
-          </div>
-        </section>
+            </div>
+          </section>
+        </div>
 
-        <section class="panel actions" aria-label="Export">
-          <button type="button" id="export-btn" class="primary">Export PNG</button>
-          <button type="button" id="copy-btn">Copy to Clipboard</button>
+        <section class="panel actions" aria-label="Export status">
           <div class="status" id="status" role="status" aria-live="polite"></div>
         </section>
       </aside>

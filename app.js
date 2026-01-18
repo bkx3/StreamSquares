@@ -5,6 +5,11 @@ const state = {
     gradientStart: "#1b1f2a",
     gradientEnd: "#3a465b",
     gradientAngle: 45,
+    gradientStartPoint: { x: 106, y: 106 },
+    gradientEndPoint: { x: 406, y: 406 },
+    radialCenter: { x: 256, y: 256 },
+    radialRadius: 256,
+    editing: false,
   },
   symbol: {
     size: 60,
@@ -15,6 +20,8 @@ const state = {
     tintEnabled: false,
     tintColor: "#ffffff",
     name: "",
+    source: "none",
+    libraryName: "",
   },
   text: {
     value: "",
@@ -35,6 +42,12 @@ const renderCanvas = document.getElementById("render-canvas");
 const renderCtx = renderCanvas.getContext("2d");
 const previewCanvas = document.getElementById("preview-canvas");
 const previewCtx = previewCanvas.getContext("2d");
+const actualSizeToggle = document.getElementById("actual-size");
+const actualSizePreview = document.getElementById("actual-size-preview");
+const actualPreviewCanvases = Array.from(
+  actualSizePreview.querySelectorAll(".actual-preview-canvas"),
+);
+const actualPreviewContexts = actualPreviewCanvases.map((canvas) => canvas.getContext("2d"));
 const dropZone = document.getElementById("drop-zone");
 const dropHint = document.getElementById("drop-hint");
 const statusEl = document.getElementById("status");
@@ -44,20 +57,41 @@ const symbolThumb = document.getElementById("symbol-thumb");
 let symbolImage = null;
 let symbolUrl = null;
 let toastTimeout = null;
+let activeGradientHandle = null;
+let gradientDragMoved = false;
+let activeGradientColorHandle = null;
+let activeRadialHandle = null;
+let radialDragMoved = false;
+
+const gradientColorPicker = document.createElement("input");
+gradientColorPicker.type = "color";
+gradientColorPicker.className = "floating-color-picker";
+gradientColorPicker.setAttribute("aria-label", "Gradient color picker");
+gradientColorPicker.hidden = true;
+dropZone.appendChild(gradientColorPicker);
 
 const controlEls = {
   symbolInput: document.getElementById("symbol-input"),
   clearSymbol: document.getElementById("clear-symbol"),
-  symbolSize: document.getElementById("symbol-size"),
-  symbolSizeValue: document.getElementById("symbol-size-value"),
+  symbolTabUpload: document.getElementById("symbol-tab-upload"),
+  symbolTabLibrary: document.getElementById("symbol-tab-library"),
+  symbolUploadPanel: document.getElementById("symbol-upload-panel"),
+  symbolLibraryPanel: document.getElementById("symbol-library-panel"),
+  iconSearch: document.getElementById("icon-search"),
+  iconGrid: document.getElementById("icon-grid"),
+  symbolPanel: document.getElementById("symbol-panel-content"),
+  symbolToggle: document.getElementById("symbol-toggle"),
+  backgroundPanel: document.getElementById("background-panel-content"),
+  backgroundToggle: document.getElementById("background-toggle"),
+  textPanel: document.getElementById("text-panel-content"),
+  textToggle: document.getElementById("text-toggle"),
+  symbolWidth: document.getElementById("symbol-width"),
+  symbolHeight: document.getElementById("symbol-height"),
+  symbolConstrain: document.getElementById("symbol-constrain"),
   symbolX: document.getElementById("symbol-x"),
-  symbolXValue: document.getElementById("symbol-x-value"),
   symbolY: document.getElementById("symbol-y"),
-  symbolYValue: document.getElementById("symbol-y-value"),
   symbolRotation: document.getElementById("symbol-rotation"),
-  symbolRotationValue: document.getElementById("symbol-rotation-value"),
   symbolOpacity: document.getElementById("symbol-opacity"),
-  symbolOpacityValue: document.getElementById("symbol-opacity-value"),
   symbolTint: document.getElementById("symbol-tint"),
   symbolTintColor: document.getElementById("symbol-tint-color"),
   backgroundMode: document.getElementById("background-mode"),
@@ -66,6 +100,8 @@ const controlEls = {
   backgroundGradientEnd: document.getElementById("background-gradient-end"),
   backgroundGradientAngle: document.getElementById("background-gradient-angle"),
   backgroundGradientAngleValue: document.getElementById("background-gradient-angle-value"),
+  backgroundGradientAngleRow: document.getElementById("background-gradient-angle-row"),
+  backgroundGradientToggle: document.getElementById("background-gradient-toggle"),
   textValue: document.getElementById("text-value"),
   textFont: document.getElementById("text-font"),
   textSize: document.getElementById("text-size"),
@@ -86,6 +122,11 @@ const controlEls = {
 };
 
 const STORAGE_KEY = "streamdeck-icon-maker-state";
+const ICON_INDEX_URL = "assets/icons/lucide/index.json";
+const ICON_BASE_URL = "assets/icons/lucide";
+
+const iconSvgCache = new Map();
+let iconButtons = [];
 
 function saveState() {
   const { background, symbol, text, guides } = state;
@@ -104,6 +145,10 @@ function loadState() {
     if (data.symbol) Object.assign(state.symbol, data.symbol);
     if (data.text) Object.assign(state.text, data.text);
     if (typeof data.guides === "boolean") state.guides = data.guides;
+    if (state.symbol.source === "upload") {
+      state.symbol.source = "none";
+      state.symbol.name = "";
+    }
   } catch (error) {
     console.error("Failed to restore state", error);
   }
@@ -116,17 +161,17 @@ function syncControls() {
   controlEls.backgroundGradientEnd.value = state.background.gradientEnd;
   controlEls.backgroundGradientAngle.value = state.background.gradientAngle;
   controlEls.backgroundGradientAngleValue.textContent = `${state.background.gradientAngle}°`;
+  controlEls.backgroundGradientToggle.setAttribute("aria-pressed", String(state.background.editing));
+  syncBackgroundPickerVisibility();
 
-  controlEls.symbolSize.value = state.symbol.size;
-  controlEls.symbolSizeValue.textContent = `${state.symbol.size}%`;
-  controlEls.symbolX.value = state.symbol.x;
-  controlEls.symbolXValue.textContent = `${state.symbol.x}%`;
-  controlEls.symbolY.value = state.symbol.y;
-  controlEls.symbolYValue.textContent = `${state.symbol.y}%`;
+  const sizePts = Math.round((state.symbol.size / 100) * 512);
+  controlEls.symbolWidth.value = sizePts;
+  controlEls.symbolHeight.value = sizePts;
+  const pos = getSymbolTopLeft();
+  controlEls.symbolX.value = Math.round(pos.x);
+  controlEls.symbolY.value = Math.round(pos.y);
   controlEls.symbolRotation.value = state.symbol.rotation;
-  controlEls.symbolRotationValue.textContent = `${state.symbol.rotation}°`;
   controlEls.symbolOpacity.value = state.symbol.opacity;
-  controlEls.symbolOpacityValue.textContent = `${state.symbol.opacity}%`;
   controlEls.symbolTint.checked = state.symbol.tintEnabled;
   controlEls.symbolTintColor.value = state.symbol.tintColor;
 
@@ -149,6 +194,79 @@ function syncControls() {
   symbolName.textContent = state.symbol.name || "No symbol loaded";
 }
 
+function ensureGradientPoints() {
+  const hasPoints = state.background.gradientStartPoint && state.background.gradientEndPoint;
+  if (!hasPoints) {
+    setGradientPointsFromAngle(state.background.gradientAngle);
+  }
+}
+
+function ensureRadialDefaults() {
+  if (!state.background.radialCenter) {
+    state.background.radialCenter = { x: 256, y: 256 };
+  }
+  if (!state.background.radialRadius || Number.isNaN(state.background.radialRadius)) {
+    state.background.radialRadius = 256;
+  }
+}
+
+function setGradientPointsFromAngle(angle) {
+  const radians = (angle - 90) * (Math.PI / 180);
+  const half = 256;
+  const x0 = half + Math.cos(radians) * half;
+  const y0 = half + Math.sin(radians) * half;
+  const x1 = half - Math.cos(radians) * half;
+  const y1 = half - Math.sin(radians) * half;
+  state.background.gradientStartPoint = { x: x0, y: y0 };
+  state.background.gradientEndPoint = { x: x1, y: y1 };
+}
+
+function updateGradientAngleFromPoints() {
+  const start = state.background.gradientStartPoint;
+  const end = state.background.gradientEndPoint;
+  const radians = Math.atan2(end.y - start.y, end.x - start.x);
+  const angle = (radians * 180) / Math.PI + 90;
+  const normalized = (angle + 360) % 360;
+  state.background.gradientAngle = Math.round(normalized);
+  controlEls.backgroundGradientAngle.value = state.background.gradientAngle;
+  controlEls.backgroundGradientAngleValue.textContent = `${state.background.gradientAngle}°`;
+}
+
+function syncBackgroundPickerVisibility() {
+  const mode = state.background.mode;
+  const isSolid = mode === "solid";
+  const isGradient = mode === "gradient" || mode === "radial";
+  controlEls.backgroundSolid.hidden = !isSolid;
+  controlEls.backgroundGradientStart.hidden = !isGradient;
+  controlEls.backgroundGradientEnd.hidden = !isGradient;
+  controlEls.backgroundGradientAngleRow.hidden = mode !== "gradient";
+  controlEls.backgroundGradientToggle.hidden = !isGradient;
+}
+
+function bindPanelToggle(panelEl, toggleEl) {
+  if (!panelEl || !toggleEl) return;
+  toggleEl.addEventListener("click", () => {
+    const isExpanded = toggleEl.getAttribute("aria-expanded") === "true";
+    const nextExpanded = !isExpanded;
+    toggleEl.setAttribute("aria-expanded", String(nextExpanded));
+    panelEl.hidden = !nextExpanded;
+    const panel = toggleEl.closest(".panel");
+    if (panel) panel.classList.toggle("is-collapsed", !nextExpanded);
+  });
+}
+
+function setSymbolMode(mode) {
+  const isUpload = mode === "upload";
+  controlEls.symbolTabUpload.classList.toggle("is-active", isUpload);
+  controlEls.symbolTabLibrary.classList.toggle("is-active", !isUpload);
+  controlEls.symbolTabUpload.setAttribute("aria-selected", String(isUpload));
+  controlEls.symbolTabLibrary.setAttribute("aria-selected", String(!isUpload));
+  controlEls.symbolTabUpload.tabIndex = isUpload ? 0 : -1;
+  controlEls.symbolTabLibrary.tabIndex = isUpload ? -1 : 0;
+  controlEls.symbolUploadPanel.hidden = !isUpload;
+  controlEls.symbolLibraryPanel.hidden = isUpload;
+}
+
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.style.color = isError ? "#f08a8a" : "#93d1a7";
@@ -165,10 +283,76 @@ function clearSymbol() {
   symbolImage = null;
   symbolUrl = null;
   state.symbol.name = "";
+  state.symbol.source = "none";
+  state.symbol.libraryName = "";
   symbolThumb.innerHTML = "";
   symbolName.textContent = "No symbol loaded";
   render();
   saveState();
+}
+
+// Normalize SVG paints: convert hardcoded fills/strokes to currentColor while
+// preserving "none" and existing paint intent for mixed-fill icons.
+function normalizeSvg(svgText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgText, "image/svg+xml");
+  const svg = doc.documentElement;
+
+  const normalizePaint = (el, attr) => {
+    if (!el.hasAttribute(attr)) return;
+    const value = (el.getAttribute(attr) || "").trim();
+    if (!value || value.toLowerCase() === "none" || value === "currentColor") return;
+    el.setAttribute(attr, "currentColor");
+  };
+
+  const extractStylePaints = (el) => {
+    const style = el.getAttribute("style");
+    if (!style) return;
+    const rules = style
+      .split(";")
+      .map((rule) => rule.trim())
+      .filter(Boolean);
+    const remaining = [];
+    rules.forEach((rule) => {
+      const [prop, rawValue] = rule.split(":").map((part) => part.trim());
+      if (!prop || rawValue == null) return;
+      if (prop === "fill" || prop === "stroke") {
+        if (rawValue.toLowerCase() !== "none" && rawValue !== "currentColor") {
+          el.setAttribute(prop, "currentColor");
+        } else {
+          el.setAttribute(prop, rawValue);
+        }
+        return;
+      }
+      remaining.push(`${prop}:${rawValue}`);
+    });
+    if (remaining.length) {
+      el.setAttribute("style", remaining.join(";"));
+    } else {
+      el.removeAttribute("style");
+    }
+  };
+
+  doc.querySelectorAll("*").forEach((el) => {
+    extractStylePaints(el);
+    normalizePaint(el, "fill");
+    normalizePaint(el, "stroke");
+  });
+
+  normalizePaint(svg, "fill");
+  normalizePaint(svg, "stroke");
+  if (!svg.hasAttribute("fill")) {
+    svg.setAttribute("fill", "none");
+  }
+
+  return new XMLSerializer().serializeToString(svg);
+}
+
+function loadSymbolSvgText(svgText, name) {
+  const normalizedSvg = normalizeSvg(svgText);
+  const blob = new Blob([normalizedSvg], { type: "image/svg+xml" });
+  const url = URL.createObjectURL(blob);
+  loadSymbolImage(url, name);
 }
 
 function handleFile(file) {
@@ -187,13 +371,15 @@ function handleFile(file) {
   if (isSvg) {
     const reader = new FileReader();
     reader.onload = () => {
-      const blob = new Blob([reader.result], { type: "image/svg+xml" });
-      symbolUrl = URL.createObjectURL(blob);
-      loadSymbolImage(symbolUrl, file.name);
+      state.symbol.source = "upload";
+      state.symbol.libraryName = "";
+      loadSymbolSvgText(reader.result, file.name);
     };
     reader.readAsText(file);
   } else {
     symbolUrl = URL.createObjectURL(file);
+    state.symbol.source = "upload";
+    state.symbol.libraryName = "";
     loadSymbolImage(symbolUrl, file.name);
   }
 }
@@ -218,6 +404,88 @@ function loadSymbolImage(url, name) {
   img.src = url;
 }
 
+async function loadLibraryIcon(name) {
+  if (!name) return;
+  try {
+    let svgText = iconSvgCache.get(name);
+    if (!svgText) {
+      const response = await fetch(`${ICON_BASE_URL}/${name}.svg`);
+      if (!response.ok) {
+        throw new Error(`Failed to load icon: ${name}`);
+      }
+      svgText = await response.text();
+      iconSvgCache.set(name, svgText);
+    }
+    loadSymbolSvgText(svgText, name);
+  } catch (error) {
+    console.error(error);
+    setStatus("Icon not found.", true);
+    clearSymbol();
+  }
+}
+
+function setSelectedIconButton(name) {
+  iconButtons.forEach((btn) => {
+    btn.classList.toggle("is-selected", btn.dataset.name === name);
+  });
+}
+
+function selectLibraryIcon(name) {
+  state.symbol.source = "library";
+  state.symbol.libraryName = name;
+  state.symbol.name = name;
+  state.symbol.size = 60;
+  state.symbol.x = 0;
+  state.symbol.y = 0;
+  state.symbol.rotation = 0;
+  state.symbol.opacity = 100;
+  state.symbol.tintEnabled = true;
+  syncControls();
+  setSelectedIconButton(name);
+  loadLibraryIcon(name);
+  saveState();
+}
+
+function filterIconButtons(query) {
+  const normalized = query.trim().toLowerCase();
+  iconButtons.forEach((btn) => {
+    const name = btn.dataset.name || "";
+    btn.hidden = normalized ? !name.includes(normalized) : false;
+  });
+}
+
+async function loadIconIndex() {
+  try {
+    const response = await fetch(ICON_INDEX_URL);
+    if (!response.ok) {
+      throw new Error("Failed to load icon index");
+    }
+    const iconNames = await response.json();
+    if (!Array.isArray(iconNames)) {
+      throw new Error("Icon index is invalid");
+    }
+    controlEls.iconGrid.innerHTML = "";
+    iconButtons = iconNames.map((name) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "icon-button";
+      btn.dataset.name = name;
+      btn.setAttribute("aria-label", `Icon: ${name}`);
+      const img = document.createElement("img");
+      img.src = `${ICON_BASE_URL}/${name}.svg`;
+      img.alt = "";
+      img.loading = "lazy";
+      btn.appendChild(img);
+      btn.addEventListener("click", () => selectLibraryIcon(name));
+      controlEls.iconGrid.appendChild(btn);
+      return btn;
+    });
+  } catch (error) {
+    console.error(error);
+    controlEls.iconGrid.innerHTML = "<div class=\"value\">No icons available.</div>";
+  }
+}
+
 function updatePreviewScale() {
   const size = previewCanvas.clientWidth;
   const ratio = window.devicePixelRatio || 1;
@@ -228,13 +496,20 @@ function updatePreviewScale() {
 }
 
 function createGradient(ctx) {
-  const angle = (state.background.gradientAngle - 90) * (Math.PI / 180);
-  const half = 256;
-  const x0 = half + Math.cos(angle) * half;
-  const y0 = half + Math.sin(angle) * half;
-  const x1 = half - Math.cos(angle) * half;
-  const y1 = half - Math.sin(angle) * half;
-  const gradient = ctx.createLinearGradient(x0, y0, x1, y1);
+  ensureGradientPoints();
+  const start = state.background.gradientStartPoint;
+  const end = state.background.gradientEndPoint;
+  const gradient = ctx.createLinearGradient(start.x, start.y, end.x, end.y);
+  gradient.addColorStop(0, state.background.gradientStart);
+  gradient.addColorStop(1, state.background.gradientEnd);
+  return gradient;
+}
+
+function createRadialGradient(ctx) {
+  ensureRadialDefaults();
+  const center = state.background.radialCenter;
+  const radius = state.background.radialRadius;
+  const gradient = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, radius);
   gradient.addColorStop(0, state.background.gradientStart);
   gradient.addColorStop(1, state.background.gradientEnd);
   return gradient;
@@ -244,6 +519,8 @@ function drawBackground(ctx) {
   ctx.clearRect(0, 0, 512, 512);
   if (state.background.mode === "solid") {
     ctx.fillStyle = state.background.solid;
+  } else if (state.background.mode === "radial") {
+    ctx.fillStyle = createRadialGradient(ctx);
   } else {
     ctx.fillStyle = createGradient(ctx);
   }
@@ -282,6 +559,26 @@ function drawSymbol(ctx) {
   }
 
   ctx.restore();
+}
+
+function getSymbolTopLeft() {
+  const size = (state.symbol.size / 100) * 512;
+  const centerX = 256 + (state.symbol.x / 100) * 256;
+  const centerY = 256 + (state.symbol.y / 100) * 256;
+  return {
+    x: centerX - size / 2,
+    y: centerY - size / 2,
+  };
+}
+
+function updateSymbolFromTopLeft(topLeftX, topLeftY) {
+  const size = (state.symbol.size / 100) * 512;
+  const clampedX = Math.min(512 - size, Math.max(0, topLeftX));
+  const clampedY = Math.min(512 - size, Math.max(0, topLeftY));
+  const centerX = clampedX + size / 2;
+  const centerY = clampedY + size / 2;
+  state.symbol.x = ((centerX - 256) / 256) * 100;
+  state.symbol.y = ((centerY - 256) / 256) * 100;
 }
 
 function drawText(ctx) {
@@ -325,6 +622,8 @@ function drawGuides(ctx) {
   ctx.lineTo(256, 512);
   ctx.moveTo(0, 256);
   ctx.lineTo(512, 256);
+  ctx.moveTo(0, 442);
+  ctx.lineTo(512, 442);
   ctx.stroke();
   ctx.restore();
 }
@@ -337,6 +636,131 @@ function render() {
 
   previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
   previewCtx.drawImage(renderCanvas, 0, 0, previewCanvas.clientWidth, previewCanvas.clientHeight);
+  if (state.background.mode === "gradient" && state.background.editing) {
+    drawGradientHandles(previewCtx);
+  }
+  if (state.background.mode === "radial" && state.background.editing) {
+    drawRadialHandles(previewCtx);
+  }
+
+  if (actualSizeToggle?.checked) {
+    renderActualSizePreview();
+  }
+}
+
+function renderActualSizePreview() {
+  const size = 256;
+  actualPreviewContexts.forEach((ctx) => {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(renderCanvas, 0, 0, 512, 512, 0, 0, size, size);
+  });
+}
+
+function drawGradientHandles(ctx) {
+  ensureGradientPoints();
+  const start = state.background.gradientStartPoint;
+  const end = state.background.gradientEndPoint;
+  const scale = previewCanvas.clientWidth / 512;
+  const startX = start.x * scale;
+  const startY = start.y * scale;
+  const endX = end.x * scale;
+  const endY = end.y * scale;
+
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(endX, endY);
+  ctx.stroke();
+
+  drawGradientHandle(ctx, startX, startY, state.background.gradientStart);
+  drawGradientHandle(ctx, endX, endY, state.background.gradientEnd);
+  ctx.restore();
+}
+
+function drawGradientHandle(ctx, x, y, color) {
+  ctx.beginPath();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.lineWidth = 1;
+  ctx.arc(x, y, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+}
+
+function getRadialHandlePoint() {
+  ensureRadialDefaults();
+  const center = state.background.radialCenter;
+  const radius = Math.max(12, state.background.radialRadius);
+  return {
+    x: Math.min(512, Math.max(0, center.x + radius)),
+    y: Math.min(512, Math.max(0, center.y)),
+  };
+}
+
+function drawRadialHandles(ctx) {
+  ensureRadialDefaults();
+  const scale = previewCanvas.clientWidth / 512;
+  const center = state.background.radialCenter;
+  const radiusPoint = getRadialHandlePoint();
+  const centerX = center.x * scale;
+  const centerY = center.y * scale;
+  const radiusX = radiusPoint.x * scale;
+  const radiusY = radiusPoint.y * scale;
+
+  ctx.save();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.6)";
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(radiusX, radiusY);
+  ctx.stroke();
+
+  drawGradientHandle(ctx, centerX, centerY, state.background.gradientStart);
+  drawGradientHandle(ctx, radiusX, radiusY, state.background.gradientEnd);
+  ctx.restore();
+}
+
+function getPointerPosition(event) {
+  const rect = previewCanvas.getBoundingClientRect();
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  const scale = 512 / rect.width;
+  return { x: x * scale, y: y * scale };
+}
+
+function hitTestHandle(point, handle) {
+  const dx = point.x - handle.x;
+  const dy = point.y - handle.y;
+  return Math.hypot(dx, dy) <= 12;
+}
+
+function hideGradientColorPicker() {
+  if (gradientColorPicker.hidden) return;
+  gradientColorPicker.hidden = true;
+  activeGradientColorHandle = null;
+}
+
+function openGradientColorPicker(handle, canvasPoint) {
+  activeGradientColorHandle = handle;
+  gradientColorPicker.value =
+    handle === "start" ? state.background.gradientStart : state.background.gradientEnd;
+
+  const scale = previewCanvas.clientWidth / 512;
+  const left = canvasPoint.x * scale;
+  const top = canvasPoint.y * scale;
+  const size = 28;
+  const maxLeft = dropZone.clientWidth - size;
+  const maxTop = dropZone.clientHeight - size;
+
+  gradientColorPicker.style.left = `${Math.min(Math.max(left - size / 2, 0), maxLeft)}px`;
+  gradientColorPicker.style.top = `${Math.min(Math.max(top - size / 2, 0), maxTop)}px`;
+
+  gradientColorPicker.hidden = false;
+  gradientColorPicker.focus({ preventScroll: true });
+  gradientColorPicker.click();
 }
 
 function exportPng() {
@@ -401,6 +825,8 @@ function resetState() {
     gradientStart: "#1b1f2a",
     gradientEnd: "#3a465b",
     gradientAngle: 45,
+    radialCenter: { x: 256, y: 256 },
+    radialRadius: 256,
   });
   Object.assign(state.symbol, {
     size: 60,
@@ -436,33 +862,61 @@ controlEls.symbolInput.addEventListener("change", (event) => {
   event.target.value = "";
 });
 
+controlEls.symbolTabUpload.addEventListener("click", () => setSymbolMode("upload"));
+controlEls.symbolTabLibrary.addEventListener("click", () => setSymbolMode("library"));
+
+controlEls.iconSearch.addEventListener("input", () => {
+  filterIconButtons(controlEls.iconSearch.value);
+});
+
 controlEls.clearSymbol.addEventListener("click", () => {
   clearSymbol();
 });
 
-bindControl(controlEls.symbolSize, () => {
-  state.symbol.size = Number(controlEls.symbolSize.value);
-  controlEls.symbolSizeValue.textContent = `${state.symbol.size}%`;
+bindControl(controlEls.symbolWidth, () => {
+  const nextPts = Number(controlEls.symbolWidth.value);
+  const clamped = Math.min(512, Math.max(0, nextPts));
+  if (controlEls.symbolConstrain.checked) {
+    controlEls.symbolHeight.value = String(clamped);
+  }
+  state.symbol.size = (clamped / 512) * 100;
+  updateSymbolFromTopLeft(controlEls.symbolX.valueAsNumber || 0, controlEls.symbolY.valueAsNumber || 0);
+  syncControls();
+});
+
+bindControl(controlEls.symbolHeight, () => {
+  const nextPts = Number(controlEls.symbolHeight.value);
+  const clamped = Math.min(512, Math.max(0, nextPts));
+  if (controlEls.symbolConstrain.checked) {
+    controlEls.symbolWidth.value = String(clamped);
+  }
+  state.symbol.size = (clamped / 512) * 100;
+  updateSymbolFromTopLeft(controlEls.symbolX.valueAsNumber || 0, controlEls.symbolY.valueAsNumber || 0);
+  syncControls();
 });
 
 bindControl(controlEls.symbolX, () => {
-  state.symbol.x = Number(controlEls.symbolX.value);
-  controlEls.symbolXValue.textContent = `${state.symbol.x}%`;
+  const next = Number(controlEls.symbolX.value);
+  const clamped = Math.min(512, Math.max(0, next));
+  const current = getSymbolTopLeft();
+  updateSymbolFromTopLeft(clamped, current.y);
+  syncControls();
 });
 
 bindControl(controlEls.symbolY, () => {
-  state.symbol.y = Number(controlEls.symbolY.value);
-  controlEls.symbolYValue.textContent = `${state.symbol.y}%`;
+  const next = Number(controlEls.symbolY.value);
+  const clamped = Math.min(512, Math.max(0, next));
+  const current = getSymbolTopLeft();
+  updateSymbolFromTopLeft(current.x, clamped);
+  syncControls();
 });
 
 bindControl(controlEls.symbolRotation, () => {
   state.symbol.rotation = Number(controlEls.symbolRotation.value);
-  controlEls.symbolRotationValue.textContent = `${state.symbol.rotation}°`;
 });
 
 bindControl(controlEls.symbolOpacity, () => {
   state.symbol.opacity = Number(controlEls.symbolOpacity.value);
-  controlEls.symbolOpacityValue.textContent = `${state.symbol.opacity}%`;
 });
 
 controlEls.symbolTint.addEventListener("change", () => {
@@ -479,6 +933,11 @@ controlEls.symbolTintColor.addEventListener("input", () => {
 
 bindControl(controlEls.backgroundMode, () => {
   state.background.mode = controlEls.backgroundMode.value;
+  if (state.background.mode === "solid") {
+    state.background.editing = false;
+  }
+  controlEls.backgroundGradientToggle.setAttribute("aria-pressed", String(state.background.editing));
+  syncBackgroundPickerVisibility();
 });
 
 bindControl(controlEls.backgroundSolid, () => {
@@ -496,6 +955,7 @@ bindControl(controlEls.backgroundGradientEnd, () => {
 bindControl(controlEls.backgroundGradientAngle, () => {
   state.background.gradientAngle = Number(controlEls.backgroundGradientAngle.value);
   controlEls.backgroundGradientAngleValue.textContent = `${state.background.gradientAngle}°`;
+  setGradientPointsFromAngle(state.background.gradientAngle);
 });
 
 bindControl(controlEls.textValue, () => {
@@ -549,6 +1009,15 @@ controlEls.toggleGuides.addEventListener("change", () => {
   render();
 });
 
+actualSizeToggle.addEventListener("change", () => {
+  actualSizePreview.hidden = !actualSizeToggle.checked;
+  previewCanvas.hidden = actualSizeToggle.checked;
+  if (!actualSizeToggle.checked) {
+    updatePreviewScale();
+  }
+  render();
+});
+
 controlEls.exportBtn.addEventListener("click", exportPng);
 controlEls.copyBtn.addEventListener("click", () => {
   copyToClipboard();
@@ -556,6 +1025,164 @@ controlEls.copyBtn.addEventListener("click", () => {
 
 controlEls.resetBtn.addEventListener("click", () => {
   resetState();
+});
+
+controlEls.backgroundGradientToggle.addEventListener("click", () => {
+  if (state.background.mode === "solid") {
+    return;
+  }
+  state.background.editing = !state.background.editing;
+  controlEls.backgroundGradientToggle.setAttribute("aria-pressed", String(state.background.editing));
+  if (!state.background.editing) {
+    hideGradientColorPicker();
+    activeGradientHandle = null;
+    activeRadialHandle = null;
+  }
+  saveState();
+  render();
+});
+
+document.querySelectorAll(".stepper-arrow").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const targetId = btn.dataset.target;
+    const step = Number(btn.dataset.step) || 0;
+    const input = document.getElementById(targetId);
+    if (!input) return;
+    const min = Number(input.min ?? "-Infinity");
+    const max = Number(input.max ?? "Infinity");
+    const current = Number(input.value || "0");
+    const next = Math.min(max, Math.max(min, current + step));
+    input.value = String(next);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+});
+
+previewCanvas.addEventListener("pointerdown", (event) => {
+  if (state.background.mode !== "gradient" && state.background.mode !== "radial") return;
+  const point = getPointerPosition(event);
+  state.background.editing = true;
+  previewCanvas.setPointerCapture(event.pointerId);
+  if (state.background.mode === "gradient") {
+    ensureGradientPoints();
+    const start = state.background.gradientStartPoint;
+    const end = state.background.gradientEndPoint;
+    gradientDragMoved = false;
+    hideGradientColorPicker();
+    if (hitTestHandle(point, start)) {
+      activeGradientHandle = "start";
+    } else if (hitTestHandle(point, end)) {
+      activeGradientHandle = "end";
+    } else {
+      activeGradientHandle = null;
+    }
+  } else {
+    ensureRadialDefaults();
+    radialDragMoved = false;
+    const center = state.background.radialCenter;
+    const radiusPoint = getRadialHandlePoint();
+    if (hitTestHandle(point, center)) {
+      activeRadialHandle = "center";
+    } else if (hitTestHandle(point, radiusPoint)) {
+      activeRadialHandle = "radius";
+    } else {
+      activeRadialHandle = null;
+    }
+  }
+  controlEls.backgroundGradientToggle.setAttribute("aria-pressed", "true");
+  render();
+});
+
+previewCanvas.addEventListener("pointermove", (event) => {
+  if (!activeGradientHandle && !activeRadialHandle) return;
+  const point = getPointerPosition(event);
+  if (activeGradientHandle) {
+    gradientDragMoved = true;
+    if (activeGradientHandle === "start") {
+      state.background.gradientStartPoint = {
+        x: Math.min(512, Math.max(0, point.x)),
+        y: Math.min(512, Math.max(0, point.y)),
+      };
+    } else {
+      state.background.gradientEndPoint = {
+        x: Math.min(512, Math.max(0, point.x)),
+        y: Math.min(512, Math.max(0, point.y)),
+      };
+    }
+    updateGradientAngleFromPoints();
+  } else if (activeRadialHandle) {
+    radialDragMoved = true;
+    if (activeRadialHandle === "center") {
+      state.background.radialCenter = {
+        x: Math.min(512, Math.max(0, point.x)),
+        y: Math.min(512, Math.max(0, point.y)),
+      };
+    } else {
+      const center = state.background.radialCenter;
+      const radius = Math.hypot(point.x - center.x, point.y - center.y);
+      state.background.radialRadius = Math.min(512, Math.max(12, radius));
+    }
+  }
+  render();
+});
+
+previewCanvas.addEventListener("pointerup", (event) => {
+  if (!state.background.editing) return;
+  previewCanvas.releasePointerCapture(event.pointerId);
+  if (activeGradientHandle) {
+    if (!gradientDragMoved) {
+      const point = getPointerPosition(event);
+      openGradientColorPicker(activeGradientHandle, point);
+    }
+    activeGradientHandle = null;
+    gradientDragMoved = false;
+  }
+  if (activeRadialHandle) {
+    activeRadialHandle = null;
+    radialDragMoved = false;
+  }
+  saveState();
+});
+
+previewCanvas.addEventListener("dblclick", (event) => {
+  if (state.background.mode !== "gradient") return;
+  const point = getPointerPosition(event);
+  ensureGradientPoints();
+  if (hitTestHandle(point, state.background.gradientStartPoint)) {
+    openGradientColorPicker("start", point);
+  } else if (hitTestHandle(point, state.background.gradientEndPoint)) {
+    openGradientColorPicker("end", point);
+  }
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (!state.background.editing) return;
+  if (event.target !== previewCanvas) {
+    state.background.editing = false;
+    activeGradientHandle = null;
+    gradientDragMoved = false;
+    activeRadialHandle = null;
+    radialDragMoved = false;
+    hideGradientColorPicker();
+    controlEls.backgroundGradientToggle.setAttribute("aria-pressed", "false");
+    render();
+  }
+});
+
+gradientColorPicker.addEventListener("input", () => {
+  if (!activeGradientColorHandle) return;
+  if (activeGradientColorHandle === "start") {
+    state.background.gradientStart = gradientColorPicker.value;
+    controlEls.backgroundGradientStart.value = gradientColorPicker.value;
+  } else {
+    state.background.gradientEnd = gradientColorPicker.value;
+    controlEls.backgroundGradientEnd.value = gradientColorPicker.value;
+  }
+  saveState();
+  render();
+});
+
+gradientColorPicker.addEventListener("blur", () => {
+  hideGradientColorPicker();
 });
 
 dropZone.addEventListener("dragover", (event) => {
@@ -582,14 +1209,34 @@ window.addEventListener("resize", updatePreviewScale);
 window.addEventListener("keydown", (event) => {
   const active = document.activeElement;
   const isInput = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA");
-  if (isInput) return;
-  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c") {
+  if (!isInput && (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "c") {
     event.preventDefault();
     copyToClipboard();
+    return;
+  }
+  if (event.key === "Escape" && state.background.editing) {
+    state.background.editing = false;
+    render();
   }
 });
 
 loadState();
+ensureGradientPoints();
+ensureRadialDefaults();
 syncControls();
+setSymbolMode(state.symbol.source === "library" ? "library" : "upload");
 updatePreviewScale();
+actualSizePreview.hidden = !actualSizeToggle.checked;
+previewCanvas.hidden = actualSizeToggle.checked;
 render();
+
+bindPanelToggle(controlEls.symbolPanel, controlEls.symbolToggle);
+bindPanelToggle(controlEls.backgroundPanel, controlEls.backgroundToggle);
+bindPanelToggle(controlEls.textPanel, controlEls.textToggle);
+
+loadIconIndex().then(() => {
+  if (state.symbol.source === "library" && state.symbol.libraryName) {
+    setSelectedIconButton(state.symbol.libraryName);
+    loadLibraryIcon(state.symbol.libraryName);
+  }
+});

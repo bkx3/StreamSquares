@@ -38,8 +38,9 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 24px;
+  /* Sidebar width */
+  grid-template-columns: minmax(0, 1fr) 400px;
+  gap: 12px;
   padding: 24px;
   max-width: 1200px;
   margin: 0 auto;
@@ -50,7 +51,7 @@ body {
   flex-direction: column;
   gap: 16px;
   align-items: stretch;
-  width: min(70vw, 620px);
+  width: min(65vw, 560px);
   margin: 0 auto;
 }
 
@@ -175,13 +176,13 @@ body {
 }
 
 .sidebar {
-  background: #141923;
-  border-radius: 20px;
-  padding: 20px;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: 18px;
-  border: 1px solid #1f2632;
+  border: none;
   max-height: 100%;
   overflow: hidden;
 }
@@ -339,7 +340,7 @@ body {
   gap: 8px;
 }
 
-.transform-box {
+.panel-cell {
   padding: 12px;
   border-radius: 14px;
   background: #0f131b;
@@ -394,6 +395,112 @@ body {
   align-items: center;
 }
 
+.background-image-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.background-image-row button {
+  background: #1c2432;
+  color: inherit;
+  border: 1px solid #2d3646;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.background-image-row .value {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.layer-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layer-actions button {
+  background: #1c2432;
+  color: inherit;
+  border: 1px solid #2d3646;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.layer-list {
+  display: grid;
+  gap: 8px;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #243041;
+  background: #0f131b;
+  font-size: 12px;
+}
+
+.layer-item.is-active {
+  border-color: #4c6fff;
+  box-shadow: 0 0 0 1px rgba(76, 111, 255, 0.5);
+}
+
+.layer-item button {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid #2d3646;
+  background: #1c2432;
+  color: inherit;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+
+.gradient-angle-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gradient-angle-inline .rotation-dial {
+  width: 34px;
+  height: 34px;
+}
+
+.gradient-angle-inline .rotation-dial::after {
+  inset: 6px;
+}
+
+.gradient-angle-inline .rotation-dial-indicator {
+  inset: 4px;
+}
+
+.gradient-angle-inline .rotation-dial-indicator::after {
+  height: 8px;
+}
+
+.gradient-angle-inline .stepper-vert {
+  padding: 2px 6px;
+}
+
+.gradient-angle-inline .stepper-vert input[type="number"] {
+  width: 42px;
+}
+
 .icon-toggle {
   width: 34px;
   height: 34px;
@@ -419,13 +526,51 @@ body {
 }
 
 .color-picker-row input[type="color"] {
-  width: 34px;
-  height: 34px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border: 1px solid #243041;
-  background: #0f131b;
-  border-radius: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
   cursor: pointer;
+}
+
+.color-picker-row input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.color-picker-row input[type="color"]::-webkit-color-swatch {
+  border-radius: 50%;
+  border: none;
+}
+
+.color-picker-row input[type="color"]::-moz-color-swatch {
+  border-radius: 50%;
+  border: none;
+}
+
+.round-color-picker {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  cursor: pointer;
+}
+
+.round-color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.round-color-picker::-webkit-color-swatch {
+  border-radius: 50%;
+  border: none;
+}
+
+.round-color-picker::-moz-color-swatch {
+  border-radius: 50%;
+  border: none;
 }
 
 .icon-grid {
@@ -509,20 +654,45 @@ body {
   gap: 12px;
 }
 
-.transform-group {
-  display: grid;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 12px;
-  background: #0f131b;
-  border: 1px solid #1f2837;
+.transform-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.transform-group-title {
-  font-size: 11px;
+.text-content-row {
+  gap: 10px;
+}
+
+.text-content-row select {
+  flex: 0 0 33%;
+  min-width: 140px;
+}
+
+.transform-inline-label {
+  min-width: 70px;
+  font-size: 12px;
+  color: #a4adbe;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #8f9ab0;
+  letter-spacing: 0.06em;
+}
+
+.inline-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-label {
+  font-size: 12px;
+  color: #a4adbe;
+  text-transform: uppercase;
+}
+
+.inline-connector {
+  font-size: 12px;
+  color: #5c677a;
 }
 
 .transform-row {
@@ -558,6 +728,7 @@ body {
   background: #111826;
   position: relative;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .rotation-dial::after {
@@ -622,6 +793,10 @@ body {
 .drag-label {
   cursor: ew-resize;
   user-select: none;
+}
+
+[data-reset-target] {
+  cursor: pointer;
 }
 
 .stepper-vert {
@@ -715,6 +890,37 @@ body {
   gap: 8px;
   font-size: 12px;
   color: #a4adbe;
+  padding-left: 6px;
+}
+
+.symbol-meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#symbol-tint-color {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: transparent;
+  cursor: pointer;
+}
+
+#symbol-tint-color::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+#symbol-tint-color::-webkit-color-swatch {
+  border-radius: 50%;
+  border: none;
+}
+
+#symbol-tint-color::-moz-color-swatch {
+  border-radius: 50%;
+  border: none;
 }
 
 .symbol-meta button,
@@ -728,20 +934,6 @@ body {
   border-radius: 10px;
   padding: 6px 10px;
   cursor: pointer;
-}
-
-.panel.actions {
-  align-items: stretch;
-}
-
-.panel.actions button {
-  width: 100%;
-}
-
-.panel.actions .primary {
-  background: #4c6fff;
-  border-color: #4c6fff;
-  color: white;
 }
 
 .status {

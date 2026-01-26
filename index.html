@@ -57,18 +57,16 @@
           <section class="panel">
             <div class="panel-content" id="symbol-panel-content">
           <div class="segmented" role="tablist" aria-label="Symbol source">
-            <button type="button" class="segmented-btn is-active" id="symbol-tab-upload" role="tab" aria-selected="true" aria-controls="symbol-upload-panel">Upload</button>
-            <button type="button" class="segmented-btn" id="symbol-tab-library" role="tab" aria-selected="false" aria-controls="symbol-library-panel">Library</button>
+            <button type="button" class="segmented-btn is-active" id="symbol-tab-library" role="tab" aria-selected="true" aria-controls="symbol-library-panel">Library</button>
+            <button type="button" class="segmented-btn" id="symbol-tab-upload" role="tab" aria-selected="false" aria-controls="symbol-upload-panel">Upload</button>
           </div>
-          <div class="symbol-panel" id="symbol-upload-panel" role="tabpanel">
+          <div class="symbol-panel" id="symbol-upload-panel" role="tabpanel" hidden>
             <div class="field">
-              <label for="symbol-input">Upload SVG or PNG</label>
               <input type="file" id="symbol-input" accept="image/svg+xml,image/png" />
             </div>
           </div>
-          <div class="symbol-panel" id="symbol-library-panel" role="tabpanel" hidden>
+          <div class="symbol-panel" id="symbol-library-panel" role="tabpanel">
             <div class="field">
-              <label for="icon-search">Search icons</label>
               <div class="icon-search-row">
                 <input type="text" id="icon-search" placeholder="Search icons..." autocomplete="off" />
                 <button type="button" class="icon-browse-toggle" id="icon-browse-toggle" aria-expanded="false" aria-controls="icon-browser">Browse</button>
@@ -80,11 +78,13 @@
           </div>
           <div class="symbol-meta" id="symbol-meta">
             <span id="symbol-name">No symbol loaded</span>
-            <button type="button" id="clear-symbol">Clear</button>
+            <div class="symbol-meta-actions">
+              <button type="button" id="clear-symbol" aria-label="Clear symbol">✕</button>
+            </div>
           </div>
-          <div class="thumb" id="symbol-thumb" aria-hidden="true"></div>
+          <div class="thumb" id="symbol-thumb" aria-hidden="true" hidden></div>
 
-          <div class="transform-box" aria-label="Transform">
+          <div class="panel-cell" aria-label="Transform">
             <div class="panel-section-header">
               <h3 class="panel-section-title">Transform</h3>
               <button type="button" class="icon-action reset-transform" id="reset-transform" aria-label="Reset transform">
@@ -95,104 +95,114 @@
               </button>
             </div>
             <div class="transform-grid" aria-label="Symbol transform">
-              <div class="transform-group" aria-label="Position">
-                <div class="transform-group-title">Position</div>
-                <div class="transform-row" aria-label="Position">
-                  <div class="control-block inline">
-                    <label class="control-label drag-label" for="symbol-pos-x" data-target="symbol-pos-x" data-step="1">X</label>
-                    <div class="stepper-vert">
-                      <div class="stepper-value">
-                        <input type="number" id="symbol-pos-x" min="0" max="512" step="1" value="106" />
-                        <span class="unit">px</span>
-                      </div>
-                      <div class="stepper-arrows">
-                        <button type="button" class="stepper-arrow" data-target="symbol-pos-x" data-step="1" aria-label="Increase X position">▲</button>
-                        <button type="button" class="stepper-arrow" data-target="symbol-pos-x" data-step="-1" aria-label="Decrease X position">▼</button>
-                      </div>
+              <div class="transform-inline-row" aria-label="Position">
+                <span class="transform-inline-label" data-reset-target="symbol-pos-x,symbol-pos-y">Position</span>
+                <div class="inline-pair">
+                  <label class="inline-label drag-label" for="symbol-pos-x" data-target="symbol-pos-x" data-step="1">x</label>
+                  <div class="stepper-vert">
+                    <div class="stepper-value">
+                      <input type="number" id="symbol-pos-x" min="0" max="512" step="1" value="106" />
+                      <span class="unit">px</span>
+                    </div>
+                    <div class="stepper-arrows">
+                      <button type="button" class="stepper-arrow" data-target="symbol-pos-x" data-step="1" aria-label="Increase X position">▲</button>
+                      <button type="button" class="stepper-arrow" data-target="symbol-pos-x" data-step="-1" aria-label="Decrease X position">▼</button>
                     </div>
                   </div>
-                  <div class="control-block inline">
-                    <label class="control-label drag-label" for="symbol-pos-y" data-target="symbol-pos-y" data-step="1">Y</label>
-                    <div class="stepper-vert">
-                      <div class="stepper-value">
-                        <input type="number" id="symbol-pos-y" min="0" max="512" step="1" value="106" />
-                        <span class="unit">px</span>
-                      </div>
-                      <div class="stepper-arrows">
-                        <button type="button" class="stepper-arrow" data-target="symbol-pos-y" data-step="1" aria-label="Increase Y position">▲</button>
-                        <button type="button" class="stepper-arrow" data-target="symbol-pos-y" data-step="-1" aria-label="Decrease Y position">▼</button>
-                      </div>
+                </div>
+              
+                <div class="inline-pair">
+                  <label class="inline-label drag-label" for="symbol-pos-y" data-target="symbol-pos-y" data-step="1">y</label>
+                  <div class="stepper-vert">
+                    <div class="stepper-value">
+                      <input type="number" id="symbol-pos-y" min="0" max="512" step="1" value="106" />
+                      <span class="unit">px</span>
+                    </div>
+                    <div class="stepper-arrows">
+                      <button type="button" class="stepper-arrow" data-target="symbol-pos-y" data-step="1" aria-label="Increase Y position">▲</button>
+                      <button type="button" class="stepper-arrow" data-target="symbol-pos-y" data-step="-1" aria-label="Decrease Y position">▼</button>
                     </div>
                   </div>
                 </div>
               </div>
-              <div class="transform-group" aria-label="Rotation">
-                <div class="transform-group-title">Rotation</div>
-                <div class="rotation-row">
-                  <div class="rotation-dial" id="symbol-rotation-dial" role="slider" aria-valuemin="-180" aria-valuemax="180" aria-valuenow="0" tabindex="0">
-                    <div class="rotation-dial-indicator"></div>
+              <div class="transform-inline-row" aria-label="Rotation">
+                <span class="transform-inline-label" data-reset-target="symbol-rotation">Rotation</span>
+                <div class="rotation-dial" id="symbol-rotation-dial" role="slider" aria-valuemin="-180" aria-valuemax="180" aria-valuenow="0" tabindex="0">
+                  <div class="rotation-dial-indicator" id="symbol-rotation-indicator"></div>
+                </div>
+                <div class="stepper-vert">
+                  <div class="stepper-value">
+                    <input type="number" id="symbol-rotation" min="-180" max="180" step="1" value="0" />
+                    <span class="unit">°</span>
                   </div>
+                </div>
+              </div>
+              <div class="transform-inline-row" aria-label="Scale">
+                <span class="transform-inline-label drag-label" data-target="symbol-scale" data-step="1" data-reset-target="symbol-scale">Scale</span>
+                <input type="range" id="symbol-scale-range" min="10" max="200" step="1" value="100" />
+                <div class="stepper-vert">
+                  <div class="stepper-value">
+                    <input type="number" id="symbol-scale" min="10" max="200" step="1" value="100" />
+                    <span class="unit">%</span>
+                  </div>
+                </div>
+              </div>
+              <div class="transform-inline-row" aria-label="Shear">
+                <span class="transform-inline-label" data-reset-target="symbol-shear-x,symbol-shear-y">Shear</span>
+                <div class="inline-pair">
+                  <label class="inline-label drag-label" for="symbol-shear-x" data-target="symbol-shear-x" data-step="1">x</label>
                   <div class="stepper-vert">
                     <div class="stepper-value">
-                      <input type="number" id="symbol-rotation" min="-180" max="180" step="1" value="0" />
+                      <input type="number" id="symbol-shear-x" min="-60" max="60" step="1" value="0" />
                       <span class="unit">°</span>
                     </div>
+                    <div class="stepper-arrows">
+                      <button type="button" class="stepper-arrow" data-target="symbol-shear-x" data-step="1" aria-label="Increase X shear">▲</button>
+                      <button type="button" class="stepper-arrow" data-target="symbol-shear-x" data-step="-1" aria-label="Decrease X shear">▼</button>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div class="transform-group" aria-label="Scale">
-                <div class="transform-group-title">Scale</div>
-                <div class="scale-row">
-                  <label class="control-label drag-label" for="symbol-scale" data-target="symbol-scale" data-step="1">Scale</label>
-                  <input type="range" id="symbol-scale-range" min="10" max="200" step="1" value="100" />
+              
+                <div class="inline-pair">
+                  <label class="inline-label drag-label" for="symbol-shear-y" data-target="symbol-shear-y" data-step="1">y</label>
                   <div class="stepper-vert">
                     <div class="stepper-value">
-                      <input type="number" id="symbol-scale" min="10" max="200" step="1" value="100" />
-                      <span class="unit">%</span>
+                      <input type="number" id="symbol-shear-y" min="-60" max="60" step="1" value="0" />
+                      <span class="unit">°</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-              <div class="transform-group" aria-label="Shear">
-                <div class="transform-group-title">Shear</div>
-                <div class="transform-row" aria-label="Shear">
-                  <div class="control-block inline">
-                    <label class="control-label drag-label" for="symbol-shear-x" data-target="symbol-shear-x" data-step="1">X</label>
-                    <div class="stepper-vert">
-                      <div class="stepper-value">
-                        <input type="number" id="symbol-shear-x" min="-60" max="60" step="1" value="0" />
-                        <span class="unit">°</span>
-                      </div>
-                      <div class="stepper-arrows">
-                        <button type="button" class="stepper-arrow" data-target="symbol-shear-x" data-step="1" aria-label="Increase X shear">▲</button>
-                        <button type="button" class="stepper-arrow" data-target="symbol-shear-x" data-step="-1" aria-label="Decrease X shear">▼</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div class="control-block inline">
-                    <label class="control-label drag-label" for="symbol-shear-y" data-target="symbol-shear-y" data-step="1">Y</label>
-                    <div class="stepper-vert">
-                      <div class="stepper-value">
-                        <input type="number" id="symbol-shear-y" min="-60" max="60" step="1" value="0" />
-                        <span class="unit">°</span>
-                      </div>
-                      <div class="stepper-arrows">
-                        <button type="button" class="stepper-arrow" data-target="symbol-shear-y" data-step="1" aria-label="Increase Y shear">▲</button>
-                        <button type="button" class="stepper-arrow" data-target="symbol-shear-y" data-step="-1" aria-label="Decrease Y shear">▼</button>
-                      </div>
+                    <div class="stepper-arrows">
+                      <button type="button" class="stepper-arrow" data-target="symbol-shear-y" data-step="1" aria-label="Increase Y shear">▲</button>
+                      <button type="button" class="stepper-arrow" data-target="symbol-shear-y" data-step="-1" aria-label="Decrease Y shear">▼</button>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <h3 class="panel-section-title">Appearance</h3>
-          <div class="field inline">
-            <label class="toggle" for="symbol-tint">
-              <input type="checkbox" id="symbol-tint" />
-              <span>Tint</span>
-            </label>
-            <input type="color" id="symbol-tint-color" value="#ffffff" aria-label="Tint color" />
+          <div class="panel-cell" aria-label="Appearance">
+            <div class="panel-section-header">
+              <h3 class="panel-section-title">Appearance</h3>
+              <button type="button" class="icon-action reset-transform" id="reset-appearance" aria-label="Reset appearance">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M3 12a9 9 0 1 0 3-6.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                  <path d="M3 4v6h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </button>
+            </div>
+            <div class="transform-inline-row" aria-label="Appearance controls">
+              <span class="transform-inline-label">Color</span>
+              <input type="color" id="symbol-tint-color" value="#ffffff" aria-label="Tint color" />
+              <div class="stepper-vert">
+                <div class="stepper-value">
+                  <input type="number" id="symbol-opacity" min="0" max="100" step="1" value="100" />
+                  <span class="unit">%</span>
+                </div>
+                <div class="stepper-arrows">
+                  <button type="button" class="stepper-arrow" data-target="symbol-opacity" data-step="1" aria-label="Increase opacity">▲</button>
+                  <button type="button" class="stepper-arrow" data-target="symbol-opacity" data-step="-1" aria-label="Decrease opacity">▼</button>
+                </div>
+              </div>
+            </div>
           </div>
             </div>
           </section>
@@ -207,11 +217,12 @@
               <option value="solid">Solid</option>
               <option value="gradient">Linear Gradient</option>
               <option value="radial">Radial Gradient</option>
+              <option value="image">Custom Image</option>
             </select>
           </div>
           <div class="field" id="background-color-row">
             <div class="color-picker-row">
-              <button type="button" class="icon-toggle" id="background-gradient-toggle" aria-pressed="false" aria-label="Toggle gradient handles">
+              <button type="button" class="icon-toggle" id="background-gradient-toggle" aria-pressed="false" aria-label="Toggle gradient handles" title="Show gradient controls">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2" />
                   <line x1="12" y1="2" x2="12" y2="6" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
@@ -223,12 +234,23 @@
               <input type="color" id="background-solid" value="#202833" aria-label="Solid background color" />
               <input type="color" id="background-gradient-start" value="#1b1f2a" aria-label="Gradient start color" />
               <input type="color" id="background-gradient-end" value="#3a465b" aria-label="Gradient end color" />
+              <div class="gradient-angle-inline" id="background-gradient-angle-row" aria-label="Gradient angle">
+                <div class="rotation-dial" id="background-gradient-dial" role="slider" aria-valuemin="0" aria-valuemax="360" aria-valuenow="45" tabindex="0">
+                  <div class="rotation-dial-indicator" id="background-gradient-indicator"></div>
+                </div>
+                <div class="stepper-vert">
+                  <div class="stepper-value">
+                    <input type="number" id="background-gradient-angle" min="0" max="360" step="1" value="45" />
+                    <span class="unit">°</span>
+                  </div>
+                </div>
+              </div>
+              <div class="background-image-row" id="background-image-row" hidden>
+                <input type="file" id="background-image-input" accept="image/*" hidden />
+                <button type="button" id="background-image-upload">Upload</button>
+                <span class="value" id="background-image-name">No image selected</span>
+              </div>
             </div>
-          </div>
-          <div class="field" id="background-gradient-angle-row">
-            <label for="background-gradient-angle">Gradient angle</label>
-            <input type="range" id="background-gradient-angle" min="0" max="360" value="45" />
-            <span class="value" id="background-gradient-angle-value">45°</span>
           </div>
             </div>
           </section>
@@ -237,68 +259,111 @@
         <div class="tab-panel" id="tab-panel-text" role="tabpanel" aria-labelledby="tab-text" hidden>
           <section class="panel">
             <div class="panel-content" id="text-panel-content">
-          <div class="field">
-            <label for="text-value">Label</label>
-            <input type="text" id="text-value" placeholder="Optional text" />
-          </div>
-          <div class="field">
-            <label for="text-font">Font</label>
-            <select id="text-font">
-              <option value="'SF Pro', system-ui">SF Pro / system</option>
-              <option value="system-ui">system-ui</option>
-              <option value="Arial, sans-serif">Arial</option>
-              <option value="Helvetica, sans-serif">Helvetica</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="text-size">Size</label>
-            <input type="range" id="text-size" min="8" max="96" value="28" />
-            <span class="value" id="text-size-value">28</span>
-          </div>
-          <div class="field">
-            <label for="text-weight">Weight</label>
-            <select id="text-weight">
-              <option value="400">400</option>
-              <option value="600">600</option>
-              <option value="700">700</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="text-color">Color</label>
-            <input type="color" id="text-color" value="#ffffff" />
-          </div>
-          <div class="field">
-            <label for="text-position">Position</label>
-            <select id="text-position">
-              <option value="bottom">Bottom</option>
-              <option value="center">Center</option>
-              <option value="top">Top</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="text-offset">Offset Y</label>
-            <input type="range" id="text-offset" min="0" max="120" value="24" />
-            <span class="value" id="text-offset-value">24</span>
-          </div>
-          <div class="field inline">
-            <label class="toggle" for="text-stroke">
-              <input type="checkbox" id="text-stroke" />
-              <span>Stroke</span>
-            </label>
-            <input type="color" id="text-stroke-color" value="#000000" aria-label="Stroke color" />
-          </div>
-          <div class="field">
-            <label for="text-stroke-width">Stroke width</label>
-            <input type="range" id="text-stroke-width" min="0" max="8" value="2" />
-            <span class="value" id="text-stroke-width-value">2</span>
-          </div>
+              <div class="panel-cell" aria-label="Text layers">
+                <div class="panel-section-header">
+                  <h3 class="panel-section-title">Layers</h3>
+                  <div class="layer-actions">
+                    <button type="button" id="text-layer-add">Add</button>
+                    <button type="button" id="text-layer-remove">Remove</button>
+                  </div>
+                </div>
+                <div class="layer-list" id="text-layer-list" role="listbox" aria-label="Text layers"></div>
+              </div>
+
+              <div class="panel-cell" aria-label="Text content">
+                <h3 class="panel-section-title">Content</h3>
+                <div class="field">
+                  <input type="text" id="text-value" placeholder="Enter text" />
+                </div>
+                <div class="transform-inline-row text-content-row" aria-label="Text font, color, and size">
+                  <select id="text-font" aria-label="Font">
+                    <option value="'SF Pro', system-ui">SF Pro / system</option>
+                    <option value="system-ui">system-ui</option>
+                    <option value="Arial, sans-serif">Arial</option>
+                    <option value="Helvetica, sans-serif">Helvetica</option>
+                  </select>
+                  <input type="color" id="text-color" class="round-color-picker" value="#ffffff" aria-label="Text color" />
+                  <div class="stepper-vert">
+                    <div class="stepper-value">
+                      <input type="number" id="text-size" min="8" max="96" step="1" value="36" />
+                      <span class="unit">px</span>
+                    </div>
+                    <div class="stepper-arrows">
+                      <button type="button" class="stepper-arrow" data-target="text-size" data-step="1" aria-label="Increase text size">▲</button>
+                      <button type="button" class="stepper-arrow" data-target="text-size" data-step="-1" aria-label="Decrease text size">▼</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="transform-inline-row" aria-label="Stroke">
+                  <label class="toggle" for="text-stroke">
+                    <input type="checkbox" id="text-stroke" />
+                    <span>Stroke</span>
+                  </label>
+                  <label class="inline-label drag-label" for="text-stroke-width" data-target="text-stroke-width" data-step="1">stroke</label>
+                  <input type="color" id="text-stroke-color" class="round-color-picker" value="#000000" aria-label="Stroke color" />
+                  <div class="stepper-vert">
+                    <div class="stepper-value">
+                      <input type="number" id="text-stroke-width" min="0" max="8" step="1" value="2" />
+                      <span class="unit">px</span>
+                    </div>
+                    <div class="stepper-arrows">
+                      <button type="button" class="stepper-arrow" data-target="text-stroke-width" data-step="1" aria-label="Increase stroke width">▲</button>
+                      <button type="button" class="stepper-arrow" data-target="text-stroke-width" data-step="-1" aria-label="Decrease stroke width">▼</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="panel-cell" aria-label="Text transform">
+                <div class="panel-section-header">
+                  <h3 class="panel-section-title">Transform</h3>
+                  <button type="button" class="icon-action reset-transform" id="reset-text-transform" aria-label="Reset text transform">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M3 12a9 9 0 1 0 3-6.7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                      <path d="M3 4v6h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                  </button>
+                </div>
+                <div class="transform-grid" aria-label="Text transform">
+                  <div class="transform-inline-row" aria-label="Position">
+                    <span class="transform-inline-label">Position</span>
+                    <div class="inline-pair">
+                      <label class="inline-label drag-label" for="text-pos-x" data-target="text-pos-x" data-step="1">x</label>
+                      <div class="stepper-vert">
+                        <div class="stepper-value">
+                          <input type="number" id="text-pos-x" min="0" max="512" step="1" value="256" />
+                          <span class="unit">px</span>
+                        </div>
+                        <div class="stepper-arrows">
+                          <button type="button" class="stepper-arrow" data-target="text-pos-x" data-step="1" aria-label="Increase X position">▲</button>
+                          <button type="button" class="stepper-arrow" data-target="text-pos-x" data-step="-1" aria-label="Decrease X position">▼</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="inline-pair">
+                      <label class="inline-label drag-label" for="text-pos-y" data-target="text-pos-y" data-step="1">y</label>
+                      <div class="stepper-vert">
+                        <div class="stepper-value">
+                          <input type="number" id="text-pos-y" min="0" max="512" step="1" value="488" />
+                          <span class="unit">px</span>
+                        </div>
+                        <div class="stepper-arrows">
+                          <button type="button" class="stepper-arrow" data-target="text-pos-y" data-step="1" aria-label="Increase Y position">▲</button>
+                          <button type="button" class="stepper-arrow" data-target="text-pos-y" data-step="-1" aria-label="Decrease Y position">▼</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
             </div>
           </section>
         </div>
 
-        <section class="panel actions" aria-label="Export status">
-          <div class="status" id="status" role="status" aria-live="polite"></div>
-        </section>
+        <div class="status" id="status" role="status" aria-live="polite"></div>
       </aside>
     </main>
 

@@ -9,6 +9,9 @@ const state = {
     gradientEndPoint: { x: 406, y: 406 },
     radialCenter: { x: 256, y: 256 },
     radialRadius: 256,
+    radialHandlePoint: { x: 512, y: 256 },
+    imageSrc: "",
+    imageName: "",
     editing: false,
   },
   symbol: {
@@ -28,16 +31,21 @@ const state = {
     libraryName: "",
   },
   text: {
-    value: "",
-    font: "'SF Pro', system-ui",
-    size: 28,
-    weight: 600,
-    color: "#ffffff",
-    position: "bottom",
-    offset: 24,
-    strokeEnabled: false,
-    strokeColor: "#000000",
-    strokeWidth: 2,
+    layers: [
+      {
+        value: "",
+        font: "'SF Pro', system-ui",
+        size: 36,
+        weight: 600,
+        color: "#ffffff",
+        strokeEnabled: false,
+        strokeColor: "#000000",
+        strokeWidth: 2,
+        x: 256,
+        y: 488,
+      },
+    ],
+    activeIndex: 0,
   },
   guides: false,
 };
@@ -57,6 +65,10 @@ const dropHint = document.getElementById("drop-hint");
 const statusEl = document.getElementById("status");
 const symbolName = document.getElementById("symbol-name");
 const symbolThumb = document.getElementById("symbol-thumb");
+const backgroundImage = new Image();
+let backgroundImageUrl = "";
+let backgroundImageIsAnimated = false;
+let backgroundImageAnimationFrame = null;
 
 let symbolImage = null;
 let symbolUrl = null;
@@ -71,6 +83,12 @@ let symbolDragMoved = false;
 let activeTabId = "tab-symbol";
 let symbolDragMode = null;
 let symbolDragStart = null;
+let textDragIndex = null;
+let textDragStart = null;
+let textDragAxis = null;
+let holdResetTimeout = null;
+let holdResetStart = 0;
+let holdResetLabel = null;
 
 const gradientColorPicker = document.createElement("input");
 gradientColorPicker.type = "color";
@@ -105,7 +123,7 @@ const controlEls = {
   symbolPosY: document.getElementById("symbol-pos-y"),
   symbolRotation: document.getElementById("symbol-rotation"),
   symbolRotationDial: document.getElementById("symbol-rotation-dial"),
-  symbolRotationIndicator: document.querySelector(".rotation-dial-indicator"),
+  symbolRotationIndicator: document.getElementById("symbol-rotation-indicator"),
   symbolOpacity: document.getElementById("symbol-opacity"),
   symbolScaleRange: document.getElementById("symbol-scale-range"),
   symbolScale: document.getElementById("symbol-scale"),
@@ -118,9 +136,14 @@ const controlEls = {
   backgroundGradientStart: document.getElementById("background-gradient-start"),
   backgroundGradientEnd: document.getElementById("background-gradient-end"),
   backgroundGradientAngle: document.getElementById("background-gradient-angle"),
-  backgroundGradientAngleValue: document.getElementById("background-gradient-angle-value"),
   backgroundGradientAngleRow: document.getElementById("background-gradient-angle-row"),
   backgroundGradientToggle: document.getElementById("background-gradient-toggle"),
+  backgroundGradientDial: document.getElementById("background-gradient-dial"),
+  backgroundGradientIndicator: document.getElementById("background-gradient-indicator"),
+  backgroundImageRow: document.getElementById("background-image-row"),
+  backgroundImageInput: document.getElementById("background-image-input"),
+  backgroundImageUpload: document.getElementById("background-image-upload"),
+  backgroundImageName: document.getElementById("background-image-name"),
   tabSymbol: document.getElementById("tab-symbol"),
   tabBackground: document.getElementById("tab-background"),
   tabText: document.getElementById("tab-text"),
@@ -130,21 +153,23 @@ const controlEls = {
   textValue: document.getElementById("text-value"),
   textFont: document.getElementById("text-font"),
   textSize: document.getElementById("text-size"),
-  textSizeValue: document.getElementById("text-size-value"),
   textWeight: document.getElementById("text-weight"),
   textColor: document.getElementById("text-color"),
-  textPosition: document.getElementById("text-position"),
-  textOffset: document.getElementById("text-offset"),
-  textOffsetValue: document.getElementById("text-offset-value"),
+  textPosX: document.getElementById("text-pos-x"),
+  textPosY: document.getElementById("text-pos-y"),
   textStroke: document.getElementById("text-stroke"),
   textStrokeColor: document.getElementById("text-stroke-color"),
   textStrokeWidth: document.getElementById("text-stroke-width"),
-  textStrokeWidthValue: document.getElementById("text-stroke-width-value"),
+  resetTextTransform: document.getElementById("reset-text-transform"),
+  textLayerList: document.getElementById("text-layer-list"),
+  textLayerAdd: document.getElementById("text-layer-add"),
+  textLayerRemove: document.getElementById("text-layer-remove"),
   exportBtn: document.getElementById("export-btn"),
   copyBtn: document.getElementById("copy-btn"),
   toggleGuides: document.getElementById("toggle-guides"),
   resetBtn: document.getElementById("reset-btn"),
   resetTransform: document.getElementById("reset-transform"),
+  resetAppearance: document.getElementById("reset-appearance"),
 };
 
 const STORAGE_KEY = "streamdeck-icon-maker-state";
@@ -183,9 +208,81 @@ function loadState() {
       state.symbol.source = "none";
       state.symbol.name = "";
     }
+    if (state.text && !Array.isArray(state.text.layers)) {
+      const legacy = state.text;
+      state.text = {
+        layers: [
+          {
+            value: legacy.value || "",
+            font: legacy.font || "'SF Pro', system-ui",
+            size: legacy.size ?? 36,
+            weight: legacy.weight ?? 600,
+            color: legacy.color || "#ffffff",
+            strokeEnabled: legacy.strokeEnabled ?? false,
+            strokeColor: legacy.strokeColor || "#000000",
+            strokeWidth: legacy.strokeWidth ?? 2,
+            x: 256,
+            y: legacy.position === "top" ? 24 : legacy.position === "center" ? 256 : 488,
+          },
+        ],
+        activeIndex: 0,
+      };
+    }
   } catch (error) {
     console.error("Failed to restore state", error);
   }
+  if (!state.background.imageSrc || state.background.imageSrc.startsWith("blob:")) {
+    clearBackgroundImage();
+    saveState();
+  }
+}
+
+function ensureTextLayers() {
+  if (!state.text.layers || !state.text.layers.length) {
+    state.text.layers = [
+      {
+        value: "",
+        font: "'SF Pro', system-ui",
+        size: 36,
+        weight: 600,
+        color: "#ffffff",
+        strokeEnabled: false,
+        strokeColor: "#000000",
+        strokeWidth: 2,
+        x: 256,
+        y: 488,
+      },
+    ];
+  }
+  if (state.text.activeIndex == null || state.text.activeIndex >= state.text.layers.length) {
+    state.text.activeIndex = 0;
+  }
+}
+
+function getActiveTextLayer() {
+  ensureTextLayers();
+  return state.text.layers[state.text.activeIndex];
+}
+
+function renderTextLayerList() {
+  if (!controlEls.textLayerList) return;
+  ensureTextLayers();
+  controlEls.textLayerList.innerHTML = "";
+  state.text.layers.forEach((layer, index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = `layer-item${index === state.text.activeIndex ? " is-active" : ""}`;
+    item.setAttribute("role", "option");
+    item.setAttribute("aria-selected", String(index === state.text.activeIndex));
+    item.textContent = layer.value?.trim() ? layer.value.trim() : `Layer ${index + 1}`;
+    item.addEventListener("click", () => {
+      state.text.activeIndex = index;
+      syncControls();
+      saveState();
+      render();
+    });
+    controlEls.textLayerList.appendChild(item);
+  });
 }
 
 function syncControls() {
@@ -194,9 +291,17 @@ function syncControls() {
   controlEls.backgroundGradientStart.value = state.background.gradientStart;
   controlEls.backgroundGradientEnd.value = state.background.gradientEnd;
   controlEls.backgroundGradientAngle.value = state.background.gradientAngle;
-  controlEls.backgroundGradientAngleValue.textContent = `${state.background.gradientAngle}°`;
+  if (controlEls.backgroundGradientDial) {
+    controlEls.backgroundGradientDial.setAttribute("aria-valuenow", String(state.background.gradientAngle));
+  }
+  if (controlEls.backgroundGradientIndicator) {
+    controlEls.backgroundGradientIndicator.style.transform = `rotate(${state.background.gradientAngle}deg)`;
+  }
   controlEls.backgroundGradientToggle.setAttribute("aria-pressed", String(state.background.editing));
   syncBackgroundPickerVisibility();
+  if (controlEls.backgroundImageName) {
+    controlEls.backgroundImageName.textContent = state.background.imageName || "No image selected";
+  }
 
   const sizePts = Math.round((state.symbol.size / 100) * 512);
   if (controlEls.symbolWidth) controlEls.symbolWidth.value = sizePts;
@@ -218,22 +323,22 @@ function syncControls() {
   if (controlEls.symbolScale) controlEls.symbolScale.value = state.symbol.scaleX;
   if (controlEls.symbolShearX) controlEls.symbolShearX.value = state.symbol.shearX;
   if (controlEls.symbolShearY) controlEls.symbolShearY.value = state.symbol.shearY;
-  controlEls.symbolTint.checked = state.symbol.tintEnabled;
-  controlEls.symbolTintColor.value = state.symbol.tintColor;
+  if (controlEls.symbolTint) controlEls.symbolTint.checked = state.symbol.tintEnabled;
+  if (controlEls.symbolTintColor) controlEls.symbolTintColor.value = state.symbol.tintColor;
 
-  controlEls.textValue.value = state.text.value;
-  controlEls.textFont.value = state.text.font;
-  controlEls.textSize.value = state.text.size;
-  controlEls.textSizeValue.textContent = state.text.size;
-  controlEls.textWeight.value = state.text.weight;
-  controlEls.textColor.value = state.text.color;
-  controlEls.textPosition.value = state.text.position;
-  controlEls.textOffset.value = state.text.offset;
-  controlEls.textOffsetValue.textContent = state.text.offset;
-  controlEls.textStroke.checked = state.text.strokeEnabled;
-  controlEls.textStrokeColor.value = state.text.strokeColor;
-  controlEls.textStrokeWidth.value = state.text.strokeWidth;
-  controlEls.textStrokeWidthValue.textContent = state.text.strokeWidth;
+  ensureTextLayers();
+  const activeLayer = getActiveTextLayer();
+  controlEls.textValue.value = activeLayer.value;
+  controlEls.textFont.value = activeLayer.font;
+  controlEls.textSize.value = activeLayer.size;
+  if (controlEls.textWeight) controlEls.textWeight.value = activeLayer.weight;
+  controlEls.textColor.value = activeLayer.color;
+  if (controlEls.textPosX) controlEls.textPosX.value = Math.round(activeLayer.x);
+  if (controlEls.textPosY) controlEls.textPosY.value = Math.round(activeLayer.y);
+  controlEls.textStroke.checked = activeLayer.strokeEnabled;
+  controlEls.textStrokeColor.value = activeLayer.strokeColor;
+  controlEls.textStrokeWidth.value = activeLayer.strokeWidth;
+  renderTextLayerList();
 
   controlEls.toggleGuides.checked = state.guides;
 
@@ -253,6 +358,12 @@ function ensureRadialDefaults() {
   }
   if (!state.background.radialRadius || Number.isNaN(state.background.radialRadius)) {
     state.background.radialRadius = 256;
+  }
+  if (!state.background.radialHandlePoint) {
+    state.background.radialHandlePoint = {
+      x: Math.min(512, Math.max(0, state.background.radialCenter.x + state.background.radialRadius)),
+      y: Math.min(512, Math.max(0, state.background.radialCenter.y)),
+    };
   }
 }
 
@@ -275,18 +386,27 @@ function updateGradientAngleFromPoints() {
   const normalized = (angle + 360) % 360;
   state.background.gradientAngle = Math.round(normalized);
   controlEls.backgroundGradientAngle.value = state.background.gradientAngle;
-  controlEls.backgroundGradientAngleValue.textContent = `${state.background.gradientAngle}°`;
+  if (controlEls.backgroundGradientDial) {
+    controlEls.backgroundGradientDial.setAttribute("aria-valuenow", String(state.background.gradientAngle));
+  }
+  if (controlEls.backgroundGradientIndicator) {
+    controlEls.backgroundGradientIndicator.style.transform = `rotate(${state.background.gradientAngle}deg)`;
+  }
 }
 
 function syncBackgroundPickerVisibility() {
   const mode = state.background.mode;
   const isSolid = mode === "solid";
   const isGradient = mode === "gradient" || mode === "radial";
+  const isImage = mode === "image";
   controlEls.backgroundSolid.hidden = !isSolid;
   controlEls.backgroundGradientStart.hidden = !isGradient;
   controlEls.backgroundGradientEnd.hidden = !isGradient;
   controlEls.backgroundGradientAngleRow.hidden = mode !== "gradient";
   controlEls.backgroundGradientToggle.hidden = !isGradient;
+  if (controlEls.backgroundImageRow) {
+    controlEls.backgroundImageRow.hidden = !isImage;
+  }
 }
 
 function bindPanelToggle(panelEl, toggleEl) {
@@ -459,14 +579,10 @@ function loadSymbolImage(url, name) {
     symbolImage = img;
     state.symbol.name = name;
     symbolName.textContent = name;
-    symbolThumb.innerHTML = "";
-    const thumbImg = document.createElement("img");
-    thumbImg.src = url;
-    thumbImg.alt = "Symbol preview";
-    symbolThumb.appendChild(thumbImg);
-    render();
-    saveState();
-  };
+  symbolThumb.innerHTML = "";
+  render();
+  saveState();
+};
   img.onerror = () => {
     setStatus("Failed to load symbol.", true);
   };
@@ -594,14 +710,65 @@ function createRadialGradient(ctx) {
 
 function drawBackground(ctx) {
   ctx.clearRect(0, 0, 512, 512);
+  if (state.background.mode === "image") {
+    drawBackgroundImage(ctx);
+    return;
+  }
   if (state.background.mode === "solid") {
     ctx.fillStyle = state.background.solid;
   } else if (state.background.mode === "radial") {
     ctx.fillStyle = createRadialGradient(ctx);
+  } else if (state.background.mode === "gradient") {
+    ctx.fillStyle = createGradient(ctx);
   } else {
     ctx.fillStyle = createGradient(ctx);
   }
   ctx.fillRect(0, 0, 512, 512);
+}
+
+function getBackgroundImageFrame() {
+  return {
+    cols: 1,
+    rows: 1,
+    colIndex: 0,
+    rowIndex: 0,
+    fit: "cover",
+  };
+}
+
+function drawBackgroundImage(ctx) {
+  if (!backgroundImage.complete || !backgroundImage.naturalWidth) {
+    ctx.fillStyle = state.background.solid;
+    ctx.fillRect(0, 0, 512, 512);
+    return;
+  }
+  const frame = getBackgroundImageFrame();
+  const cellWidth = backgroundImage.naturalWidth / frame.cols;
+  const cellHeight = backgroundImage.naturalHeight / frame.rows;
+  const sourceX = cellWidth * frame.colIndex;
+  const sourceY = cellHeight * frame.rowIndex;
+  const sourceW = cellWidth;
+  const sourceH = cellHeight;
+  const targetW = 512;
+  const targetH = 512;
+  const scale = frame.fit === "contain"
+    ? Math.min(targetW / sourceW, targetH / sourceH)
+    : Math.max(targetW / sourceW, targetH / sourceH);
+  const drawW = sourceW * scale;
+  const drawH = sourceH * scale;
+  const drawX = (targetW - drawW) / 2;
+  const drawY = (targetH - drawH) / 2;
+  ctx.drawImage(
+    backgroundImage,
+    sourceX,
+    sourceY,
+    sourceW,
+    sourceH,
+    drawX,
+    drawY,
+    drawW,
+    drawH,
+  );
 }
 
 function drawSymbol(ctx) {
@@ -803,6 +970,78 @@ function updateSymbolCursor(point) {
   previewCanvas.style.cursor = "default";
 }
 
+function createHoldResetCursor(progress) {
+  const size = 48;
+  const center = size / 2;
+  const radius = 18;
+  const startAngle = -Math.PI / 2;
+  const endAngle = startAngle + Math.min(1, Math.max(0, progress)) * Math.PI * 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, size, size);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.beginPath();
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = "#f15b5b";
+  ctx.beginPath();
+  ctx.arc(center, center, radius, startAngle, endAngle);
+  ctx.stroke();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+  ctx.beginPath();
+  ctx.arc(center, center, 2, 0, Math.PI * 2);
+  ctx.fill();
+  return `url(${canvas.toDataURL("image/png")}) ${center} ${center}, progress`;
+}
+
+function resetInputs(ids) {
+  ids.forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input) return;
+    const initial = input.defaultValue ?? input.getAttribute("value") ?? "";
+    if (initial !== "") {
+      input.value = initial;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  });
+}
+
+function startHoldReset(label) {
+  const targetIds = label.dataset.resetTarget?.split(",").map((id) => id.trim()).filter(Boolean);
+  if (!targetIds?.length) return;
+  if (holdResetLabel && holdResetLabel !== label) {
+    endHoldReset();
+  }
+  holdResetLabel = label;
+  holdResetStart = performance.now();
+  const updateCursor = () => {
+    if (holdResetLabel !== label) return;
+    const elapsed = performance.now() - holdResetStart;
+    const progress = Math.min(elapsed / 2000, 1);
+    document.body.style.cursor = createHoldResetCursor(progress);
+    if (progress < 1) {
+      requestAnimationFrame(updateCursor);
+    }
+  };
+  updateCursor();
+  holdResetTimeout = window.setTimeout(() => {
+    resetInputs(targetIds);
+    endHoldReset();
+  }, 2000);
+}
+
+function endHoldReset() {
+  if (holdResetTimeout) {
+    window.clearTimeout(holdResetTimeout);
+  }
+  holdResetTimeout = null;
+  holdResetLabel = null;
+  document.body.style.cursor = "";
+}
+
 function getSymbolTopLeft() {
   const size =
     (state.symbol.size / 100) * 512 * (Math.max(state.symbol.scaleX, state.symbol.scaleY) / 100);
@@ -826,32 +1065,55 @@ function updateSymbolFromTopLeft(topLeftX, topLeftY) {
 }
 
 function drawText(ctx) {
-  if (!state.text.value.trim()) return;
+  ensureTextLayers();
+  state.text.layers.forEach((layer) => {
+    if (!layer.value?.trim()) return;
+    ctx.save();
+    ctx.font = `${layer.weight} ${layer.size}px ${layer.font}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    if (layer.strokeEnabled && layer.strokeWidth > 0) {
+      ctx.lineWidth = layer.strokeWidth;
+      ctx.strokeStyle = layer.strokeColor;
+      ctx.strokeText(layer.value, layer.x, layer.y);
+    }
+    ctx.fillStyle = layer.color;
+    ctx.fillText(layer.value, layer.x, layer.y);
+    ctx.restore();
+  });
+}
 
-  const fontSize = state.text.size;
-  const fontWeight = state.text.weight;
-  const fontFamily = state.text.font;
-  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+function getTextLayerBounds(layer, ctx = renderCtx) {
+  ctx.save();
+  ctx.font = `${layer.weight} ${layer.size}px ${layer.font}`;
+  const metrics = ctx.measureText(layer.value || "");
+  const width = metrics.width;
+  const height = layer.size;
+  ctx.restore();
+  return {
+    left: layer.x - width / 2,
+    right: layer.x + width / 2,
+    top: layer.y - height / 2,
+    bottom: layer.y + height / 2,
+  };
+}
 
-  let y = 256;
-  if (state.text.position === "bottom") {
-    y = 512 - state.text.offset;
-  } else if (state.text.position === "top") {
-    y = state.text.offset;
-  } else {
-    y = 256 + (state.text.offset - 24);
+function getTextLayerIndexAtPoint(point) {
+  ensureTextLayers();
+  for (let i = state.text.layers.length - 1; i >= 0; i -= 1) {
+    const layer = state.text.layers[i];
+    if (!layer.value?.trim()) continue;
+    const bounds = getTextLayerBounds(layer);
+    if (
+      point.x >= bounds.left &&
+      point.x <= bounds.right &&
+      point.y >= bounds.top &&
+      point.y <= bounds.bottom
+    ) {
+      return i;
+    }
   }
-
-  if (state.text.strokeEnabled && state.text.strokeWidth > 0) {
-    ctx.lineWidth = state.text.strokeWidth;
-    ctx.strokeStyle = state.text.strokeColor;
-    ctx.strokeText(state.text.value, 256, y);
-  }
-
-  ctx.fillStyle = state.text.color;
-  ctx.fillText(state.text.value, 256, y);
+  return null;
 }
 
 function drawGuides(ctx) {
@@ -937,11 +1199,9 @@ function drawGradientHandle(ctx, x, y, color) {
 
 function getRadialHandlePoint() {
   ensureRadialDefaults();
-  const center = state.background.radialCenter;
-  const radius = Math.max(12, state.background.radialRadius);
   return {
-    x: Math.min(512, Math.max(0, center.x + radius)),
-    y: Math.min(512, Math.max(0, center.y)),
+    x: Math.min(512, Math.max(0, state.background.radialHandlePoint.x)),
+    y: Math.min(512, Math.max(0, state.background.radialHandlePoint.y)),
   };
 }
 
@@ -1096,6 +1356,9 @@ function resetState() {
     gradientAngle: 45,
     radialCenter: { x: 256, y: 256 },
     radialRadius: 256,
+    radialHandlePoint: { x: 512, y: 256 },
+    imageSrc: "",
+    imageName: "",
   });
   Object.assign(state.symbol, {
     size: 60,
@@ -1112,21 +1375,97 @@ function resetState() {
     name: "",
   });
   Object.assign(state.text, {
-    value: "",
-    font: "'SF Pro', system-ui",
-    size: 28,
-    weight: 600,
-    color: "#ffffff",
-    position: "bottom",
-    offset: 24,
-    strokeEnabled: false,
-    strokeColor: "#000000",
-    strokeWidth: 2,
+    layers: [
+      {
+        value: "",
+        font: "'SF Pro', system-ui",
+        size: 28,
+        weight: 600,
+        color: "#ffffff",
+        strokeEnabled: false,
+        strokeColor: "#000000",
+        strokeWidth: 2,
+        x: 256,
+        y: 488,
+      },
+    ],
+    activeIndex: 0,
   });
   state.guides = false;
   clearSymbol();
+  clearBackgroundImage();
   syncControls();
   render();
+}
+
+function clearBackgroundImage() {
+  if (backgroundImageAnimationFrame) {
+    cancelAnimationFrame(backgroundImageAnimationFrame);
+    backgroundImageAnimationFrame = null;
+  }
+  if (backgroundImageUrl) {
+    URL.revokeObjectURL(backgroundImageUrl);
+  }
+  backgroundImageUrl = "";
+  backgroundImageIsAnimated = false;
+  backgroundImage.src = "";
+  state.background.imageSrc = "";
+  state.background.imageName = "";
+}
+
+function loadBackgroundImage(file) {
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    setStatus("Please upload an image file.", true);
+    return;
+  }
+  const isAnimatedGif = file.type === "image/gif";
+  const maxBytes = 25 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    setStatus("Image too large (max 25MB).", true);
+    return;
+  }
+  if (backgroundImageUrl) {
+    URL.revokeObjectURL(backgroundImageUrl);
+  }
+  backgroundImageUrl = URL.createObjectURL(file);
+  backgroundImageIsAnimated = isAnimatedGif;
+  backgroundImage.onload = () => {
+    const maxDimension = 4096;
+    if (backgroundImage.naturalWidth > maxDimension || backgroundImage.naturalHeight > maxDimension) {
+      setStatus("Image resolution too large (max 4096px).", true);
+      clearBackgroundImage();
+      syncControls();
+      render();
+      return;
+    }
+    state.background.imageSrc = backgroundImageUrl;
+    state.background.imageName = file.name;
+    syncControls();
+    saveState();
+    render();
+    if (backgroundImageIsAnimated) {
+      scheduleBackgroundAnimation();
+    }
+  };
+  backgroundImage.onerror = () => {
+    setStatus("Failed to load image.", true);
+    clearBackgroundImage();
+    syncControls();
+    render();
+  };
+  backgroundImage.src = backgroundImageUrl;
+}
+
+function scheduleBackgroundAnimation() {
+  if (backgroundImageAnimationFrame) {
+    return;
+  }
+  const tick = () => {
+    backgroundImageAnimationFrame = requestAnimationFrame(tick);
+    render();
+  };
+  backgroundImageAnimationFrame = requestAnimationFrame(tick);
 }
 
 controlEls.symbolInput.addEventListener("change", (event) => {
@@ -1208,11 +1547,13 @@ bindControl(controlEls.symbolShearY, () => {
   syncControls();
 });
 
-controlEls.symbolTint.addEventListener("change", () => {
-  state.symbol.tintEnabled = controlEls.symbolTint.checked;
-  saveState();
-  render();
-});
+if (controlEls.symbolTint) {
+  controlEls.symbolTint.addEventListener("change", () => {
+    state.symbol.tintEnabled = controlEls.symbolTint.checked;
+    saveState();
+    render();
+  });
+}
 
 controlEls.symbolTintColor.addEventListener("input", () => {
   state.symbol.tintColor = controlEls.symbolTintColor.value;
@@ -1222,11 +1563,12 @@ controlEls.symbolTintColor.addEventListener("input", () => {
 
 bindControl(controlEls.backgroundMode, () => {
   state.background.mode = controlEls.backgroundMode.value;
-  if (state.background.mode === "solid") {
+  if (state.background.mode === "solid" || state.background.mode === "image") {
     state.background.editing = false;
   }
   controlEls.backgroundGradientToggle.setAttribute("aria-pressed", String(state.background.editing));
   syncBackgroundPickerVisibility();
+  render();
 });
 
 bindControl(controlEls.backgroundSolid, () => {
@@ -1243,54 +1585,100 @@ bindControl(controlEls.backgroundGradientEnd, () => {
 
 bindControl(controlEls.backgroundGradientAngle, () => {
   state.background.gradientAngle = Number(controlEls.backgroundGradientAngle.value);
-  controlEls.backgroundGradientAngleValue.textContent = `${state.background.gradientAngle}°`;
+  if (controlEls.backgroundGradientDial) {
+    controlEls.backgroundGradientDial.setAttribute("aria-valuenow", String(state.background.gradientAngle));
+  }
+  if (controlEls.backgroundGradientIndicator) {
+    controlEls.backgroundGradientIndicator.style.transform = `rotate(${state.background.gradientAngle}deg)`;
+  }
   setGradientPointsFromAngle(state.background.gradientAngle);
 });
 
 bindControl(controlEls.textValue, () => {
-  state.text.value = controlEls.textValue.value;
+  getActiveTextLayer().value = controlEls.textValue.value;
+  renderTextLayerList();
 });
 
 bindControl(controlEls.textFont, () => {
-  state.text.font = controlEls.textFont.value;
+  getActiveTextLayer().font = controlEls.textFont.value;
 });
 
 bindControl(controlEls.textSize, () => {
-  state.text.size = Number(controlEls.textSize.value);
-  controlEls.textSizeValue.textContent = state.text.size;
+  const next = Number(controlEls.textSize.value);
+  getActiveTextLayer().size = next;
 });
 
-bindControl(controlEls.textWeight, () => {
-  state.text.weight = Number(controlEls.textWeight.value);
-});
+if (controlEls.textWeight) {
+  bindControl(controlEls.textWeight, () => {
+    getActiveTextLayer().weight = Number(controlEls.textWeight.value);
+  });
+}
 
 bindControl(controlEls.textColor, () => {
-  state.text.color = controlEls.textColor.value;
+  getActiveTextLayer().color = controlEls.textColor.value;
 });
 
-bindControl(controlEls.textPosition, () => {
-  state.text.position = controlEls.textPosition.value;
+bindControl(controlEls.textPosX, () => {
+  getActiveTextLayer().x = Number(controlEls.textPosX.value);
 });
 
-bindControl(controlEls.textOffset, () => {
-  state.text.offset = Number(controlEls.textOffset.value);
-  controlEls.textOffsetValue.textContent = state.text.offset;
+bindControl(controlEls.textPosY, () => {
+  getActiveTextLayer().y = Number(controlEls.textPosY.value);
 });
 
 controlEls.textStroke.addEventListener("change", () => {
-  state.text.strokeEnabled = controlEls.textStroke.checked;
+  getActiveTextLayer().strokeEnabled = controlEls.textStroke.checked;
   saveState();
   render();
 });
 
 bindControl(controlEls.textStrokeColor, () => {
-  state.text.strokeColor = controlEls.textStrokeColor.value;
+  getActiveTextLayer().strokeColor = controlEls.textStrokeColor.value;
 });
 
 bindControl(controlEls.textStrokeWidth, () => {
-  state.text.strokeWidth = Number(controlEls.textStrokeWidth.value);
-  controlEls.textStrokeWidthValue.textContent = state.text.strokeWidth;
+  getActiveTextLayer().strokeWidth = Number(controlEls.textStrokeWidth.value);
 });
+
+if (controlEls.textLayerAdd) {
+  controlEls.textLayerAdd.addEventListener("click", () => {
+    ensureTextLayers();
+    state.text.layers.push({
+      value: "",
+      font: "'SF Pro', system-ui",
+      size: 36,
+      weight: 600,
+      color: "#ffffff",
+      strokeEnabled: false,
+      strokeColor: "#000000",
+      strokeWidth: 2,
+      x: 256,
+      y: 488,
+    });
+    state.text.activeIndex = state.text.layers.length - 1;
+    syncControls();
+    saveState();
+    render();
+  });
+}
+
+if (controlEls.textLayerRemove) {
+  controlEls.textLayerRemove.addEventListener("click", () => {
+    ensureTextLayers();
+    if (state.text.layers.length <= 1) {
+      state.text.layers[0].value = "";
+      syncControls();
+      saveState();
+      render();
+      return;
+    }
+    state.text.layers.splice(state.text.activeIndex, 1);
+    state.text.activeIndex = Math.max(0, state.text.activeIndex - 1);
+    syncControls();
+    saveState();
+    render();
+  });
+}
 
 controlEls.toggleGuides.addEventListener("change", () => {
   state.guides = controlEls.toggleGuides.checked;
@@ -1322,8 +1710,20 @@ if (controlEls.resetTransform) {
   });
 }
 
+if (controlEls.resetAppearance) {
+  controlEls.resetAppearance.addEventListener("click", () => {
+    resetSymbolAppearance();
+  });
+}
+
+if (controlEls.resetTextTransform) {
+  controlEls.resetTextTransform.addEventListener("click", () => {
+    resetTextTransform();
+  });
+}
+
 controlEls.backgroundGradientToggle.addEventListener("click", () => {
-  if (state.background.mode === "solid") {
+  if (state.background.mode === "solid" || state.background.mode === "image") {
     return;
   }
   state.background.editing = !state.background.editing;
@@ -1336,6 +1736,17 @@ controlEls.backgroundGradientToggle.addEventListener("click", () => {
   saveState();
   render();
 });
+
+if (controlEls.backgroundImageUpload && controlEls.backgroundImageInput) {
+  controlEls.backgroundImageUpload.addEventListener("click", () => {
+    controlEls.backgroundImageInput.click();
+  });
+  controlEls.backgroundImageInput.addEventListener("change", (event) => {
+    const file = event.target.files[0];
+    loadBackgroundImage(file);
+    event.target.value = "";
+  });
+}
 
 controlEls.tabSymbol.addEventListener("click", () => setActiveTab("tab-symbol"));
 controlEls.tabBackground.addEventListener("click", () => setActiveTab("tab-background"));
@@ -1393,6 +1804,32 @@ document.querySelectorAll(".drag-label").forEach((label) => {
   });
 });
 
+document.addEventListener("pointerdown", (event) => {
+  const label = event.target.closest?.("[data-reset-target]");
+  if (!label) return;
+  if (event.button !== 0) return;
+  if (label.classList.contains("is-dragging")) return;
+  event.preventDefault();
+  label.setPointerCapture?.(event.pointerId);
+  startHoldReset(label);
+  const cancel = () => {
+    endHoldReset();
+    window.removeEventListener("pointerup", cancel);
+    window.removeEventListener("pointercancel", cancel);
+    window.removeEventListener("blur", cancel);
+    window.removeEventListener("pointermove", onMove);
+  };
+  const onMove = (moveEvent) => {
+    if (Math.abs(moveEvent.movementX) > 2 || Math.abs(moveEvent.movementY) > 2) {
+      cancel();
+    }
+  };
+  window.addEventListener("pointerup", cancel);
+  window.addEventListener("pointercancel", cancel);
+  window.addEventListener("blur", cancel);
+  window.addEventListener("pointermove", onMove);
+});
+
 if (controlEls.symbolRotationDial) {
   const updateRotationFromDial = (event) => {
     const rect = controlEls.symbolRotationDial.getBoundingClientRect();
@@ -1443,6 +1880,59 @@ if (controlEls.symbolRotationDial) {
   });
 }
 
+if (controlEls.backgroundGradientDial) {
+  const updateGradientFromDial = (event) => {
+    const rect = controlEls.backgroundGradientDial.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = event.clientX - cx;
+    const dy = event.clientY - cy;
+    const angle = Math.atan2(dy, dx);
+    let degrees = Math.round((angle * 180) / Math.PI + 90);
+    if (degrees < 0) degrees += 360;
+    if (degrees >= 360) degrees -= 360;
+    state.background.gradientAngle = degrees;
+    syncControls();
+    setGradientPointsFromAngle(state.background.gradientAngle);
+    saveState();
+    render();
+  };
+
+  controlEls.backgroundGradientDial.addEventListener("pointerdown", (event) => {
+    controlEls.backgroundGradientDial.setPointerCapture(event.pointerId);
+    updateGradientFromDial(event);
+  });
+
+  controlEls.backgroundGradientDial.addEventListener("pointermove", (event) => {
+    if (controlEls.backgroundGradientDial.hasPointerCapture(event.pointerId)) {
+      updateGradientFromDial(event);
+    }
+  });
+
+  controlEls.backgroundGradientDial.addEventListener("pointerup", (event) => {
+    if (controlEls.backgroundGradientDial.hasPointerCapture(event.pointerId)) {
+      controlEls.backgroundGradientDial.releasePointerCapture(event.pointerId);
+    }
+  });
+
+  controlEls.backgroundGradientDial.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowUp") {
+      state.background.gradientAngle = (state.background.gradientAngle + 1) % 360;
+      syncControls();
+      setGradientPointsFromAngle(state.background.gradientAngle);
+      saveState();
+      render();
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowDown") {
+      state.background.gradientAngle = (state.background.gradientAngle + 359) % 360;
+      syncControls();
+      setGradientPointsFromAngle(state.background.gradientAngle);
+      saveState();
+      render();
+    }
+  });
+}
+
 previewCanvas.addEventListener("pointerdown", (event) => {
   const point = getPointerPosition(event);
   const isSymbolTabActive = activeTabId === "tab-symbol";
@@ -1474,6 +1964,23 @@ previewCanvas.addEventListener("pointerdown", (event) => {
       };
       symbolDragMoved = false;
       previewCanvas.setPointerCapture(event.pointerId);
+      render();
+      return;
+    }
+  }
+  if (activeTabId === "tab-text") {
+    const hitIndex = getTextLayerIndexAtPoint(point);
+    if (hitIndex != null) {
+      state.text.activeIndex = hitIndex;
+      textDragIndex = hitIndex;
+      textDragStart = {
+        point,
+        layerX: state.text.layers[hitIndex].x,
+        layerY: state.text.layers[hitIndex].y,
+      };
+      textDragAxis = null;
+      previewCanvas.setPointerCapture(event.pointerId);
+      syncControls();
       render();
       return;
     }
@@ -1514,6 +2021,29 @@ previewCanvas.addEventListener("pointerdown", (event) => {
 
 previewCanvas.addEventListener("pointermove", (event) => {
   const point = getPointerPosition(event);
+  if (textDragIndex != null) {
+    const layer = state.text.layers[textDragIndex];
+    const dx = point.x - (textDragStart?.point.x ?? point.x);
+    const dy = point.y - (textDragStart?.point.y ?? point.y);
+    if (!event.shiftKey) {
+      textDragAxis = null;
+    } else if (!textDragAxis) {
+      textDragAxis = Math.abs(dx) >= Math.abs(dy) ? "x" : "y";
+    }
+    let nextX = (textDragStart?.layerX ?? layer.x) + dx;
+    let nextY = (textDragStart?.layerY ?? layer.y) + dy;
+    if (textDragAxis === "x") {
+      nextY = textDragStart?.layerY ?? layer.y;
+    }
+    if (textDragAxis === "y") {
+      nextX = textDragStart?.layerX ?? layer.x;
+    }
+    layer.x = Math.min(512, Math.max(0, nextX));
+    layer.y = Math.min(512, Math.max(0, nextY));
+    syncControls();
+    render();
+    return;
+  }
   if (symbolDragMode) {
     symbolDragMoved = true;
     if (symbolDragMode === "resize") {
@@ -1562,13 +2092,22 @@ previewCanvas.addEventListener("pointermove", (event) => {
   } else if (activeRadialHandle) {
     radialDragMoved = true;
     if (activeRadialHandle === "center") {
-      state.background.radialCenter = {
+      const clampedCenter = {
         x: Math.min(512, Math.max(0, point.x)),
         y: Math.min(512, Math.max(0, point.y)),
       };
+      const handle = getRadialHandlePoint();
+      const radius = Math.hypot(handle.x - clampedCenter.x, handle.y - clampedCenter.y);
+      state.background.radialCenter = clampedCenter;
+      state.background.radialRadius = Math.min(512, Math.max(12, radius));
     } else {
       const center = state.background.radialCenter;
-      const radius = Math.hypot(point.x - center.x, point.y - center.y);
+      const clampedPoint = {
+        x: Math.min(512, Math.max(0, point.x)),
+        y: Math.min(512, Math.max(0, point.y)),
+      };
+      const radius = Math.hypot(clampedPoint.x - center.x, clampedPoint.y - center.y);
+      state.background.radialHandlePoint = clampedPoint;
       state.background.radialRadius = Math.min(512, Math.max(12, radius));
     }
   }
@@ -1578,6 +2117,14 @@ previewCanvas.addEventListener("pointermove", (event) => {
 previewCanvas.addEventListener("pointerup", (event) => {
   if (previewCanvas.hasPointerCapture(event.pointerId)) {
     previewCanvas.releasePointerCapture(event.pointerId);
+  }
+  if (textDragIndex != null) {
+    textDragIndex = null;
+    textDragStart = null;
+    textDragAxis = null;
+    saveState();
+    render();
+    return;
   }
   if (symbolDragMode) {
     activeSymbolHandle = null;
@@ -1635,6 +2182,12 @@ document.addEventListener("pointerdown", (event) => {
     symbolDragMoved = false;
     symbolDragMode = null;
     symbolDragStart = null;
+    needsRender = true;
+  }
+  if (textDragIndex != null) {
+    textDragIndex = null;
+    textDragStart = null;
+    textDragAxis = null;
     needsRender = true;
   }
   if (needsRender) {
@@ -1695,11 +2248,27 @@ window.addEventListener("keydown", (event) => {
 });
 
 loadState();
+if (state.background.imageSrc) {
+  backgroundImageIsAnimated = state.background.imageSrc.toLowerCase().endsWith(".gif");
+  backgroundImage.onload = () => {
+    render();
+    if (backgroundImageIsAnimated) {
+      scheduleBackgroundAnimation();
+    }
+  };
+  backgroundImage.onerror = () => {
+    clearBackgroundImage();
+    syncControls();
+    render();
+  };
+  backgroundImageUrl = state.background.imageSrc;
+  backgroundImage.src = state.background.imageSrc;
+}
 ensureGradientPoints();
 ensureRadialDefaults();
 syncControls();
 setActiveTab("tab-symbol");
-setSymbolMode(state.symbol.source === "library" ? "library" : "upload");
+setSymbolMode(state.symbol.source === "upload" ? "upload" : "library");
 updatePreviewScale();
 actualSizePreview.hidden = !actualSizeToggle.checked;
 previewCanvas.hidden = actualSizeToggle.checked;
@@ -1723,6 +2292,25 @@ function resetSymbolTransform() {
   state.symbol.scaleY = 100;
   state.symbol.shearX = 0;
   state.symbol.shearY = 0;
+  syncControls();
+  saveState();
+  render();
+}
+
+function resetSymbolAppearance() {
+  state.symbol.opacity = 100;
+  state.symbol.tintEnabled = false;
+  state.symbol.tintColor = "#ffffff";
+  syncControls();
+  saveState();
+  render();
+}
+
+function resetTextTransform() {
+  const layer = getActiveTextLayer();
+  layer.x = 256;
+  layer.y = 488;
+  layer.size = 36;
   syncControls();
   saveState();
   render();
